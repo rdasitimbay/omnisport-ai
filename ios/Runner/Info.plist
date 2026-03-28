@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>OmniSport-AI necesita acceso a tu galería para personalizar tu foto de perfil.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>OmniSport-AI necesita acceso a tu cámara para personalizar tu foto de perfil.</string>
 </dict>
 </plist>

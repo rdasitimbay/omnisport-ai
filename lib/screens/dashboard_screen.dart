@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firestore_service.dart';
 import 'training_screen.dart';
+import 'profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final String currentAthleteId; // Por ahora, pasamos el ID estáticamente o de auth
@@ -17,31 +18,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // background color from HTML
-      appBar: AppBar(
-        title: const Text('OmniSport-AI', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _firestoreService.getFirstAthleteData(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return const Center(child: Text("Error al leer la colección 'atletas'"));
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("Atleta no encontrado. La colección 'atletas' está vacía."));
-          }
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _firestoreService.getFirstAthleteData(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: Color(0xFFF8F9FA),
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError) {
+          return const Scaffold(
+            backgroundColor: Color(0xFFF8F9FA),
+            body: Center(child: Text("Error al cargar atletas")),
+          );
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Scaffold(
+            backgroundColor: Color(0xFFF8F9FA),
+            body: Center(child: Text("Atleta no encontrado")),
+          );
+        }
 
-          var athleteData = snapshot.data!.docs.first.data();
-          String nombre = athleteData['nombre_completo'] ?? athleteData['nombre'] ?? 'Desconocido';
-          String disciplina = athleteData['disciplina'] ?? 'Sin disciplina';
+        final athleteDoc = snapshot.data!.docs.first;
+        final athleteData = athleteDoc.data();
+        final String nombre = athleteData['nombre_completo'] ?? athleteData['nombre'] ?? 'Desconocido';
+        final String disciplina = athleteData['disciplina'] ?? 'Sin disciplina';
 
-          return SingleChildScrollView(
+        return Scaffold(
+          backgroundColor: const Color(0xFFF8F9FA),
+          appBar: AppBar(
+            title: const Text('OmniSport-AI',
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+            backgroundColor: Colors.white,
+            elevation: 0,
+          ),
+          body: SingleChildScrollView(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -49,22 +61,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   _buildWelcomeCard(nombre, disciplina),
                   const SizedBox(height: 24),
-                  _buildQuickActions(snapshot.data!.docs.first.id, nombre, disciplina),
+                  _buildQuickActions(athleteDoc.id, nombre, disciplina),
                   const SizedBox(height: 24),
                   _buildWeeklyPerformance(),
                 ],
+              ),
             ),
           ),
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: 0,
+            onTap: (index) {
+              if (index == 0) return; // Ya estamos en Dashboard
+              
+              String destination = index == 1 ? 'Entrenamiento' : 'Perfil';
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Abriendo $destination... 🎾'), duration: const Duration(seconds: 1)),
+              );
+
+              if (index == 1) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TrainingScreen(
+                      athleteId: athleteDoc.id,
+                      athleteName: nombre,
+                      discipline: disciplina,
+                    ),
+                  ),
+                );
+              } else if (index == 2) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProfileScreen(
+                      athleteId: athleteDoc.id,
+                      athleteName: nombre,
+                      photoBase64: athleteData['photoBase64'],
+                    ),
+                  ),
+                );
+              }
+            },
+            items: const [
+              BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
+              BottomNavigationBarItem(icon: Icon(Icons.fitness_center), label: 'Entrenamiento'),
+              BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Perfil'),
+            ],
+          ),
         );
-        },
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.fitness_center), label: 'Entrenamiento'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Perfil'),
-        ],
-      ),
+      },
     );
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'screens/dashboard_screen.dart';
 import 'firebase_options.dart';
 
@@ -10,6 +11,18 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    
+    // Inicio de sesión anónimo automático para habilitar permisos de Storage
+    try {
+      await FirebaseAuth.instance.signInAnonymously();
+      debugPrint("Firebase Auth: Sesión iniciada de forma anónima.");
+    } on FirebaseAuthException catch (authError) {
+      if (authError.code == 'configuration-not-found') {
+        debugPrint("AVISO: Para subir fotos, habilita el inicio de sesión 'Anónimo' en tu consola de Firebase.");
+      } else {
+        debugPrint("Firebase Auth Error: ${authError.code} - ${authError.message}");
+      }
+    }
   } catch (e) {
     debugPrint("Firebase initialization failed. Error: $e");
   }
