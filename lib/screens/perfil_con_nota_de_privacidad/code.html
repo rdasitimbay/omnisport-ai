@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-variant": "#e1e3e4",
+              "surface-container-high": "#e7e8e9",
+              "surface-container": "#edeeef",
+              "on-background": "#191c1d",
+              "on-secondary-container": "#475a7f",
+              "surface-container-lowest": "#ffffff",
+              "on-surface": "#191c1d",
+              "on-tertiary-fixed": "#351000",
+              "secondary-container": "#bfd2fd",
+              "surface-dim": "#d9dadb",
+              "background": "#f8f9fa",
+              "on-tertiary-fixed-variant": "#7b2f00",
+              "error": "#ba1a1a",
+              "primary": "#003f87",
+              "primary-container": "#0056b3",
+              "surface-container-highest": "#e1e3e4",
+              "on-tertiary": "#ffffff",
+              "on-secondary": "#ffffff",
+              "surface": "#f8f9fa",
+              "on-secondary-fixed-variant": "#34476a",
+              "on-primary": "#ffffff",
+              "on-primary-fixed": "#001a40",
+              "error-container": "#ffdad6",
+              "inverse-surface": "#2e3132",
+              "tertiary-container": "#983c00",
+              "primary-fixed-dim": "#acc7ff",
+              "secondary-fixed": "#d7e2ff",
+              "tertiary-fixed-dim": "#ffb694",
+              "tertiary-fixed": "#ffdbcc",
+              "secondary": "#4c5e84",
+              "surface-container-low": "#f3f4f5",
+              "on-surface-variant": "#424752",
+              "on-error": "#ffffff",
+              "on-secondary-fixed": "#041b3c",
+              "on-error-container": "#93000a",
+              "on-primary-fixed-variant": "#004491",
+              "primary-fixed": "#d7e2ff",
+              "on-primary-container": "#bbd0ff",
+              "surface-bright": "#f8f9fa",
+              "surface-tint": "#115cb9",
+              "inverse-primary": "#acc7ff",
+              "on-tertiary-container": "#ffc2a7",
+              "outline": "#727784",
+              "outline-variant": "#c2c6d4",
+              "inverse-on-surface": "#f0f1f2",
+              "tertiary": "#722b00",
+              "secondary-fixed-dim": "#b3c7f1"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface min-h-screen pb-24">
+<!-- TopAppBar -->
+<header class="bg-white/85 dark:bg-slate-950/85 backdrop-blur-xl fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 w-full shadow-[0_12px_40px_rgba(0,26,64,0.06)]">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-blue-700 dark:text-blue-400" data-icon="bolt">bolt</span>
+<h1 class="text-blue-700 dark:text-blue-400 font-manrope font-black tracking-tight uppercase text-xl tracking-tighter">OmniSport-AI</h1>
+</div>
+<div class="w-10 h-10 rounded-full bg-surface-container overflow-hidden">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="close-up portrait of a determined male athlete with short hair in sports gear, neutral background, professional studio lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDbZJPZRV2W2YQpkXsktAufVeCJVL7aPLsRf-8Yh2GbRLnhfq-oTSKH1agQ2qSj8Kmzn2rKpwSQZucOEXsLED5KeWaROle0vyyd_PsbVt-ZHMJfshebx6DgqQAlPYUrl5dUIdYY5RY2FR4vNKOiPtAVUuBbG3KaD5EMWzJJbL9_Lsdcr9HQ9GHuvheBT6rNh_6IbY4Lonq9WQJ9HP9iRS8IR4GPVl3IH78oZMVJkCj5PaLlqeq28RhTWV3PfL45fFefN-Xf8al3wvQ"/>
+</div>
+</header>
+<main class="mt-20 px-6 space-y-8">
+<!-- Profile Identity Hero -->
+<section class="pt-6 flex flex-col items-center text-center">
+<div class="relative mb-4">
+<div class="w-32 h-32 rounded-full p-1 bg-gradient-to-tr from-primary to-secondary">
+<div class="w-full h-full rounded-full border-4 border-surface overflow-hidden">
+<img alt="Carlos Atleta" class="w-full h-full object-cover" data-alt="close-up portrait of a determined male athlete with short hair in sports gear, neutral background, professional studio lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCiHKp9nMcqpKRR8I8ImWmro075dB_PDotw3CsTGAM-S8YV5-C_U6lbze4l-eB_1wzyXeW1eg427qKBLBnzo12QgpQxMRb3NJQnKVZmdEDhfoj8iohGvocxBQogkjo-gjFyENwRUcNeVLXJhpUvszwC4UeEFo_zk-dluA6DBhyshAhKGLuAbMdEXKhucnnQR2NX35YCN8sVSR59XaF1OEk_oE-JfsXzSjBjkL7zlt0VIX6KFfgLx-UpVoUiskLHdubWxE0eR1ZeTVk"/>
+</div>
+</div>
+<div class="absolute bottom-1 right-1 bg-primary text-white p-2 rounded-full shadow-lg">
+<span class="material-symbols-outlined text-sm" data-icon="edit">edit</span>
+</div>
+</div>
+<div>
+<h2 class="text-3xl font-black tracking-tight text-on-surface">Carlos Atleta</h2>
+<div class="flex items-center justify-center gap-2 mt-1">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="sports_volleyball">sports_volleyball</span>
+<span class="text-on-surface-variant font-medium tracking-wide">Voleibol Pro</span>
+</div>
+</div>
+</section>
+<!-- Stats Bento Grid -->
+<section class="grid grid-cols-2 gap-4">
+<div class="col-span-2 bg-surface-container-lowest p-6 rounded-full shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-primary-container/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="fitness_center">fitness_center</span>
+</div>
+<div>
+<p class="text-xs font-bold uppercase tracking-widest text-on-surface-variant">Entrenamientos</p>
+<p class="text-2xl font-black text-on-surface">128</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline-variant" data-icon="trending_up">trending_up</span>
+</div>
+<div class="bg-surface-container-lowest p-5 rounded-full shadow-sm space-y-1">
+<span class="material-symbols-outlined text-tertiary" data-icon="emoji_events" style="font-variation-settings: 'FILL' 1;">emoji_events</span>
+<p class="text-2xl font-black text-on-surface">12</p>
+<p class="text-[10px] font-bold uppercase tracking-tight text-on-surface-variant leading-none">Torneos Ganados</p>
+</div>
+<div class="bg-surface-container-lowest p-5 rounded-full shadow-sm space-y-1">
+<span class="material-symbols-outlined text-primary" data-icon="military_tech">military_tech</span>
+<p class="text-2xl font-black text-on-surface">8</p>
+<p class="text-[10px] font-bold uppercase tracking-tight text-on-surface-variant leading-none">Récords Pro</p>
+</div>
+</section>
+<!-- Settings List -->
+<section class="bg-surface-container-low rounded-3xl p-2 space-y-1">
+<h3 class="px-6 pt-4 pb-2 text-xs font-black uppercase tracking-[0.2em] text-on-surface-variant">Preferencias</h3>
+<div class="flex items-center justify-between px-6 py-4 bg-surface-container-lowest rounded-2xl hover:bg-slate-50 transition-colors">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-secondary-fixed-variant" data-icon="settings">settings</span>
+<span class="font-semibold text-on-surface">Ajustes de cuenta</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant" data-icon="chevron_right">chevron_right</span>
+</div>
+<div class="flex items-center justify-between px-6 py-4 bg-surface-container-lowest rounded-2xl hover:bg-slate-50 transition-colors">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-secondary-fixed-variant" data-icon="notifications">notifications</span>
+<span class="font-semibold text-on-surface">Notificaciones</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-xs font-bold text-primary bg-primary-container/20 px-2 py-0.5 rounded-full">Activo</span>
+<span class="material-symbols-outlined text-outline-variant" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<div class="flex items-center justify-between px-6 py-4 bg-surface-container-lowest rounded-2xl hover:bg-slate-50 transition-colors">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-secondary-fixed-variant" data-icon="help">help</span>
+<span class="font-semibold text-on-surface">Centro de Ayuda</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant" data-icon="chevron_right">chevron_right</span>
+</div>
+</section>
+<!-- Logout Action -->
+<button class="w-full py-5 rounded-full border border-error/20 flex items-center justify-center gap-3 text-error font-bold active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+            Cerrar Sesión
+        </button>
+<div class="pt-4 pb-2 text-center">
+<p class="text-[10px] font-medium text-slate-500/70 tracking-tight">
+Tus datos están protegidos bajo la LOPDP de Ecuador.<br/>
+EMPRESA XXX garantiza tu privacidad
+</p>
+</div></main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-end pb-6 pt-3 px-4 bg-white dark:bg-slate-950 shadow-[0_-8px_30px_rgba(0,0,0,0.04)] rounded-t-3xl border-none">
+<!-- Dashboard -->
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-2 hover:text-blue-500 transition-all active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-inter text-[10px] font-bold tracking-wide">Dashboard</span>
+</a>
+<!-- Entrenamiento -->
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-2 hover:text-blue-500 transition-all active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="fitness_center">fitness_center</span>
+<span class="font-inter text-[10px] font-bold tracking-wide">Entrenamiento</span>
+</a>
+<!-- Torneos -->
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-2 hover:text-blue-500 transition-all active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="emoji_events">emoji_events</span>
+<span class="font-inter text-[10px] font-bold tracking-wide">Torneos</span>
+</a>
+<!-- Perfil (ACTIVE) -->
+<a class="flex flex-col items-center justify-center bg-gradient-to-br from-blue-600 to-blue-800 text-white rounded-full px-5 py-2 scale-110 -translate-y-1 shadow-lg active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="person" style="font-variation-settings: 'FILL' 1;">person</span>
+<span class="font-inter text-[10px] font-bold tracking-wide">Perfil</span>
+</a>
+</nav>
+</body></html>

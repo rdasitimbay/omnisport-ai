@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "430589318678",
+    "project_id": "omnisport-ai",
+    "storage_bucket": "omnisport-ai.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:430589318678:android:f312d1927f646f0dc88737",
+        "android_client_info": {
+          "package_name": "com.omnisportai.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD1dkg3tNBrFt-a6ztd4avVIOKnm2bO-Ng"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

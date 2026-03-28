@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OmniSport-AI | Competición</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-variant": "#e1e3e4",
+              "surface-container-high": "#e7e8e9",
+              "surface-container": "#edeeef",
+              "on-background": "#191c1d",
+              "on-secondary-container": "#475a7f",
+              "surface-container-lowest": "#ffffff",
+              "on-surface": "#191c1d",
+              "on-tertiary-fixed": "#351000",
+              "secondary-container": "#bfd2fd",
+              "surface-dim": "#d9dadb",
+              "background": "#f8f9fa",
+              "on-tertiary-fixed-variant": "#7b2f00",
+              "error": "#ba1a1a",
+              "primary": "#003f87",
+              "primary-container": "#0056b3",
+              "surface-container-highest": "#e1e3e4",
+              "on-tertiary": "#ffffff",
+              "on-secondary": "#ffffff",
+              "surface": "#f8f9fa",
+              "on-secondary-fixed-variant": "#34476a",
+              "on-primary": "#ffffff",
+              "on-primary-fixed": "#001a40",
+              "error-container": "#ffdad6",
+              "inverse-surface": "#2e3132",
+              "tertiary-container": "#983c00",
+              "primary-fixed-dim": "#acc7ff",
+              "secondary-fixed": "#d7e2ff",
+              "tertiary-fixed-dim": "#ffb694",
+              "tertiary-fixed": "#ffdbcc",
+              "secondary": "#4c5e84",
+              "surface-container-low": "#f3f4f5",
+              "on-surface-variant": "#424752",
+              "on-error": "#ffffff",
+              "on-secondary-fixed": "#041b3c",
+              "on-error-container": "#93000a",
+              "on-primary-fixed-variant": "#004491",
+              "primary-fixed": "#d7e2ff",
+              "on-primary-container": "#bbd0ff",
+              "surface-bright": "#f8f9fa",
+              "surface-tint": "#115cb9",
+              "inverse-primary": "#acc7ff",
+              "on-tertiary-container": "#ffc2a7",
+              "outline": "#727784",
+              "outline-variant": "#c2c6d4",
+              "inverse-on-surface": "#f0f1f2",
+              "tertiary": "#722b00",
+              "secondary-fixed-dim": "#b3c7f1"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="bg-white/85 dark:bg-slate-950/85 backdrop-blur-xl fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 w-full shadow-[0_12px_40px_rgba(0,26,64,0.06)]">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-blue-700 dark:text-blue-400" data-icon="bolt">bolt</span>
+<h1 class="font-manrope font-black tracking-tight uppercase text-xl text-blue-700 dark:text-blue-400">OmniSport-AI</h1>
+</div>
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-container border-2 border-primary-container">
+<img alt="Profile" data-alt="professional headshot of an athletic man in tech apparel with clean lighting and blurred gym background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAr5kCXID1Ibqa3y1heZzIQGNr1pM5eAdUBfMnFByGLoLrC9duUneYyrrhQvjvArE2Xv2BzroJ0c6qrSZR_k1eRS0GXkpdWJXMNne2n8bhDyEsAQGg35cIWP7E-ojhBkTF9t17EdTrfR7a6LU3C-BqBZ8LpcKuHCGs8ndufcaqkdFXueM-BqQrJKEl1q9fQX3LvcDbkeh-43gIG8huBH1YaAxQ1Cxl035z_9Z64Xvz2L4WAHHSRG8FQYlEk_hyk14lXar2AT8P04b4"/>
+</div>
+</header>
+<main class="mt-20 px-4 space-y-8">
+<!-- Hero Section -->
+<section class="pt-4">
+<div class="flex items-end justify-between mb-2">
+<div>
+<span class="text-primary font-bold tracking-widest text-[10px] uppercase">Torneo Activo</span>
+<h2 class="text-3xl font-extrabold tracking-tighter text-on-surface leading-none">Copa Elite 2024</h2>
+</div>
+<span class="bg-primary-container text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-tighter shadow-sm">En Vivo</span>
+</div>
+<div class="h-[140px] w-full rounded-xl overflow-hidden relative group">
+<img class="w-full h-full object-cover" data-alt="high-action dramatic stadium lighting at night during a championship soccer match with atmospheric lens flares" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD7HhJqjmyWwu2TAq55313pSYozS4oPSbovsrrr6fXf8ekPzkulLEHC_iU5GIJGXXuvxviX0RKdZ36vwJb988gJUfRxzu1U3Z8X7mZ3qK6BxnpZMvELDqe_11phB0oms3N8-QXO8Aquq7Y1hLZLyFhd3E5i7leRpBiEvLjIogSxNR0BWwPd8IBtRMbTOnrpGRiCscwem7uTSUcvT9MM1wPqQDGCfaJIRmQlN7AszUqDWOy_NkmcAj2qW_gHXPQl-rh-MSa9-eXFglU"/>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/80 to-transparent flex items-end p-4">
+<p class="text-white font-medium text-sm">Próxima Jornada: Mañana 19:00h</p>
+</div>
+</div>
+</section>
+<!-- Tab View Switcher -->
+<div class="flex p-1 bg-surface-container-low rounded-full gap-1">
+<button class="flex-1 py-3 px-6 rounded-full bg-surface-container-lowest shadow-sm text-primary font-bold text-sm transition-all">Calendario</button>
+<button class="flex-1 py-3 px-6 rounded-full text-on-surface-variant font-medium text-sm hover:bg-surface-container transition-all">Tabla de Posiciones</button>
+</div>
+<!-- Calendar View (Upcoming Events) -->
+<section class="space-y-4">
+<div class="flex items-center justify-between">
+<h3 class="text-xl font-bold tracking-tight">Próximos Encuentros</h3>
+<span class="material-symbols-outlined text-outline" data-icon="filter_list">filter_list</span>
+</div>
+<div class="space-y-3">
+<!-- Match Card 1 -->
+<div class="bg-surface-container-lowest p-5 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex flex-col gap-4">
+<div class="flex justify-between items-center text-[11px] font-bold uppercase tracking-widest text-outline">
+<span>Sábado, 24 de Mayo</span>
+<span class="text-primary-container">Estadio Nacional</span>
+</div>
+<div class="flex items-center justify-between gap-2">
+<div class="flex flex-col items-center flex-1 gap-2">
+<div class="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center p-2">
+<img data-alt="abstract soccer team crest minimalist logo gold and blue" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBc8cPaRIzyxJAo_s8asL2xx-axymQHPfEAVVuG43UXsfCcyx8mFZw-AzplKxBBZoHVKoI_iMxQld9bx-WPJfQUNLchtmywyzoka5YSiIdu0bjB5AOGQ5uYDIw2zo4XoObBXnNJPCgrNGl4hh0o4gV6oEHeLh2BQvesb5p66sn2kfNKN3Ua_kTa85nFVN5kXpx9G85OJ-iG7ZGJomkorguoAhXI-sTYeFKLVuHL7ffvLA_Aw5YMavLS93TzIdzGeKpePpFzqtZi1aI"/>
+</div>
+<span class="text-xs font-bold text-center">Titanes FC</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<span class="text-2xl font-black text-primary">VS</span>
+<span class="bg-surface-container-high px-2 py-0.5 rounded text-[10px] font-black">19:30</span>
+</div>
+<div class="flex flex-col items-center flex-1 gap-2">
+<div class="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center p-2">
+<img data-alt="abstract athletic team crest minimalist logo red and white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCyiHGo0a3YuaXWOJr67MfFU6ld6fRTklihubPTWF3zMkT6SwrKtDJaJZabx9aRvIRy4S4YiZQ3-dv82GAnI7Q1Xx-mKeGs_2aP1-LUKl3RF-TVe7Y8KZfMMNfSvghyt89mwVxcQpsi9NUJ4AJWO8m7ztMOSCVAlsbbOGPM5p08U0N81el5JpVTciaJN49XpJZmhYark4xOgRI8rxl8_rBpc63miwW_JoDRAff8XtAK7iVpvWiAg9k_pJn7fY_nRhxhz57FNp3lETY"/>
+</div>
+<span class="text-xs font-bold text-center">Raptors SC</span>
+</div>
+</div>
+</div>
+<!-- Match Card 2 -->
+<div class="bg-surface-container-lowest p-5 rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex flex-col gap-4 opacity-75">
+<div class="flex justify-between items-center text-[11px] font-bold uppercase tracking-widest text-outline">
+<span>Domingo, 25 de Mayo</span>
+<span>Arena Central</span>
+</div>
+<div class="flex items-center justify-between gap-2">
+<div class="flex flex-col items-center flex-1 gap-2">
+<div class="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center p-2">
+<img data-alt="modern sport team badge green and silver" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBNmuGyEo7_950cskmNzRkFGbwF1i2qH423LksyFi7TGPUvb1-aLd8it6GgIWEp96Rg1Jb5c7DdPJZP2NG3LGWypsrlYMt5b_JhkGl-nuG2FoJVW9mDC6YScNQ5y5BChc1nD6NfD4-qV9me-zAGMBpvIJ6nlh7OrRj5cdGZZfmRqxaF7FdoHMKAXSonsK193E4EDbr3_kWpKBKp_uEa2_-7iLIlsUPzQ848sgX52QoZFXZ1bK9LPN4lMmF05VEMDxt-k15rkeDAFDk"/>
+</div>
+<span class="text-xs font-bold text-center">Vipers XV</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<span class="text-2xl font-black text-on-surface-variant/40">VS</span>
+<span class="bg-surface-container-high px-2 py-0.5 rounded text-[10px] font-black">16:00</span>
+</div>
+<div class="flex flex-col items-center flex-1 gap-2">
+<div class="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center p-2">
+<img data-alt="minimalist football team logo black and orange" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSwB3wE0fTyI6iQyxvPAmXWhgrYZmw5myayQhEx45gg9GoI7vj3xkB7YX95Fe1e-If6x4LncmqzbLnqrm1GlUPziCr4-KSdmeYDJSjjNf465-dZ7aAxNSR0h7QccW72YpFYDW5CZd5ygw6jSbW9Xa-7E7tEvSxINtIQ94Tt79TzMm94xYPlY90i92xIRuHsCHyqaAdC0ntTrYvJaFxWKrO2EqUBOuZ8reLiUvBJ6nqWCGb1FT_YG-w0NpG96Pr0tKm9RRDirRjk58"/>
+</div>
+<span class="text-xs font-bold text-center">Galaxy United</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Leaderboard (Recess Layering) -->
+<section class="space-y-4">
+<h3 class="text-xl font-bold tracking-tight px-1">Clasificación General</h3>
+<div class="bg-surface-container-low rounded-2xl overflow-hidden p-1">
+<table class="w-full text-sm">
+<thead class="text-[10px] uppercase font-black tracking-widest text-on-secondary-container/60">
+<tr>
+<th class="text-left p-4">Pos</th>
+<th class="text-left p-4">Equipo</th>
+<th class="text-center p-4">PJ</th>
+<th class="text-right p-4">Pts</th>
+</tr>
+</thead>
+<tbody class="bg-surface-container-lowest rounded-xl">
+<!-- Leaderboard Row 1 -->
+<tr class="border-b border-surface-container">
+<td class="p-4 font-black text-primary">01</td>
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded bg-surface-container flex-shrink-0">
+<img data-alt="small team crest icon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAvg-rtZ5fI1fQb_X8h31AQ2CpfPdW5W1KRe2eXNm9M6eWDVKJTHZbrSutBmBFLasizlvKRNOuG4UrJSuVmOxCiwm6oRYPIUmrJLY42DE__VXFfPvTOiXrkxWH1dOwiUZAnZfDjBGSBUkNUBUxnUrpy-E8RgFwi-VGKDE1gKPn5UceHQmU8sN_W_0PFyWsPlwTPEJz3so_TTnQmLsT1lS8kq-IWJhypjw3pYDjBJzQA6sMHU1k6PA69xwZt-9YMM3NJ4tfUDSCwGr4"/>
+</div>
+<span class="font-bold">Titanes FC</span>
+</div>
+</td>
+<td class="p-4 text-center font-medium">12</td>
+<td class="p-4 text-right font-black">34</td>
+</tr>
+<!-- Leaderboard Row 2 -->
+<tr class="border-b border-surface-container">
+<td class="p-4 font-black text-on-surface-variant">02</td>
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded bg-surface-container flex-shrink-0">
+<img data-alt="small team crest icon red" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAw7WYoUR06pJEk5SQZU8sSQXMAIap0lhMLQlZUyi-d5gAMOkbHgieMpAc48e0TR6vOUjVKT3ledDiH0Faj_h6GhqAMoBZIfLCiWdONDWUSukE5SUHP4UaUo-PYqyYQBij6sWE-bNhMufKj61wS1tyzoUCxQbPwOLoYu9-7MqbmXWJ30VmmXWJTRpjqVka-ilHWYdq7IScRdHcx2f4WHPRJZTaZZdD5jdfYR0oHNSBP50MfM7Of_ruNDwQ8ZTZTE_KwkNM9svys_-0"/>
+</div>
+<span class="font-bold">Raptors SC</span>
+</div>
+</td>
+<td class="p-4 text-center font-medium">12</td>
+<td class="p-4 text-right font-black">31</td>
+</tr>
+<!-- Leaderboard Row 3 (Highlighted User Team) -->
+<tr class="bg-primary-container text-white">
+<td class="p-4 font-black">03</td>
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded bg-white/20 flex-shrink-0">
+<img data-alt="small team crest icon green" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPVQZlKYRzGcNPDY2vVTtqr6PEiUSipZQWYI6Pt3lh0YQObfS3RZHXvBAZ_jREmM4TjyBCVDxKryibThuvXDee77nzi9plxqx3Qo0uNEkriDijNp9xXjOWjWc0XC4OXsqWuKx-BjQSZCUP2xZPqWVPiVWnj_RmP1RgFctWKD94-nF_QFUssudEWjH9OskzqlQXJiKaZ9BrNDdhixUIwvwGMFJgmVdff3Ol2VVaKYhI5lDuUNCSMbFtvuJ7avyr0zJ-G2-gGmES_Sk"/>
+</div>
+<span class="font-black italic">Vipers XV</span>
+</div>
+</td>
+<td class="p-4 text-center font-bold">11</td>
+<td class="p-4 text-right font-black">28</td>
+</tr>
+<!-- Leaderboard Row 4 -->
+<tr>
+<td class="p-4 font-black text-on-surface-variant">04</td>
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded bg-surface-container flex-shrink-0">
+<img data-alt="small team crest icon orange" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCluRpbpCOpqyO8N3oSJHXfHGtRm542W3u2l2-lr3KUpycEM5dKHrcSn-hDPaSU_9xVsdxdCAAa8xkA4q8npkIQzy275U3sNG2u_dUHzReiEB6F-qsEstj5RyXsfbhkTfBe7_l1CE6LJj8b4zke5nlx-O4vKUIxf4_UiktrpCY_q9VOkvBzBih7418j-a4pHI5HmuIA6-bIqUtHox6Uj2WRwP0tfxLrNd6y6hwKwFQQ8e_Np4xNmerV4EJe_ZC4rJr4tPUMtyMEZeg"/>
+</div>
+<span class="font-bold">Galaxy Utd</span>
+</div>
+</td>
+<td class="p-4 text-center font-medium">12</td>
+<td class="p-4 text-right font-black">25</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-end pb-6 pt-3 px-4 bg-white dark:bg-slate-950 shadow-[0_-8px_30px_rgba(0,0,0,0.04)] rounded-t-3xl border-none">
+<!-- Dashboard Tab -->
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-2 hover:text-blue-500 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-inter text-[10px] font-bold tracking-wide">Dashboard</span>
+</a>
+<!-- Entrenamiento Tab -->
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-2 hover:text-blue-500 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="fitness_center">fitness_center</span>
+<span class="font-inter text-[10px] font-bold tracking-wide">Entrenamiento</span>
+</a>
+<!-- Torneos Tab (ACTIVE) -->
+<a class="flex flex-col items-center justify-center bg-gradient-to-br from-blue-600 to-blue-800 text-white rounded-full px-5 py-2 scale-110 -translate-y-1 shadow-lg active:scale-90 transition-transform duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="emoji_events" style="font-variation-settings: 'FILL' 1;">emoji_events</span>
+<span class="font-inter text-[10px] font-bold tracking-wide">Torneos</span>
+</a>
+<!-- Perfil Tab -->
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-2 hover:text-blue-500 transition-all active:scale-90 duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-inter text-[10px] font-bold tracking-wide">Perfil</span>
+</a>
+</nav>
+</body></html>

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>OmniSport-AI Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-variant": "#e1e3e4",
+                        "surface-container-high": "#e7e8e9",
+                        "surface-container": "#edeeef",
+                        "on-background": "#191c1d",
+                        "on-secondary-container": "#475a7f",
+                        "surface-container-lowest": "#ffffff",
+                        "on-surface": "#191c1d",
+                        "on-tertiary-fixed": "#351000",
+                        "secondary-container": "#bfd2fd",
+                        "surface-dim": "#d9dadb",
+                        "background": "#f8f9fa",
+                        "on-tertiary-fixed-variant": "#7b2f00",
+                        "error": "#ba1a1a",
+                        "primary": "#003f87",
+                        "primary-container": "#0056b3",
+                        "surface-container-highest": "#e1e3e4",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary": "#ffffff",
+                        "surface": "#f8f9fa",
+                        "on-secondary-fixed-variant": "#34476a",
+                        "on-primary": "#ffffff",
+                        "on-primary-fixed": "#001a40",
+                        "error-container": "#ffdad6",
+                        "inverse-surface": "#2e3132",
+                        "tertiary-container": "#983c00",
+                        "primary-fixed-dim": "#acc7ff",
+                        "secondary-fixed": "#d7e2ff",
+                        "tertiary-fixed-dim": "#ffb694",
+                        "tertiary-fixed": "#ffdbcc",
+                        "secondary": "#4c5e84",
+                        "surface-container-low": "#f3f4f5",
+                        "on-surface-variant": "#424752",
+                        "on-error": "#ffffff",
+                        "on-secondary-fixed": "#041b3c",
+                        "on-error-container": "#93000a",
+                        "on-primary-fixed-variant": "#004491",
+                        "primary-fixed": "#d7e2ff",
+                        "on-primary-container": "#bbd0ff",
+                        "surface-bright": "#f8f9fa",
+                        "surface-tint": "#115cb9",
+                        "inverse-primary": "#acc7ff",
+                        "on-tertiary-container": "#ffc2a7",
+                        "outline": "#727784",
+                        "outline-variant": "#c2c6d4",
+                        "inverse-on-surface": "#f0f1f2",
+                        "tertiary": "#722b00",
+                        "secondary-fixed-dim": "#b3c7f1"
+                    },
+                    fontFamily: {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="bg-white/85 dark:bg-slate-950/85 backdrop-blur-xl fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 w-full shadow-[0_12px_40px_rgba(0,26,64,0.06)]">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-blue-700 dark:text-blue-400" data-icon="bolt">bolt</span>
+<h1 class="font-manrope font-black tracking-tight uppercase text-xl text-blue-700 dark:text-blue-400 tracking-tighter">OmniSport-AI</h1>
+</div>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container p-0.5 active:scale-95 duration-200 cursor-pointer">
+<img alt="User Profile" class="w-full h-full object-cover rounded-full" data-alt="Close-up portrait of a determined young female athlete with athletic gear, soft studio lighting, clean background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDDNAEcAxLvy9NsU-nA1SLSegufcRDSLa44efUZl_-fxV_O6kDP1TK03pdvEe39xthcH_Kq3-k0vvivcQotB6H1wZYSM18W7Jg5ZtC0tF1vqCI-jlHZ7kviDuPpfQoM1AccvkaFCUnCq_b1bNOEs394Hff8RVnE9_v1V1LNtGjtUJXBfDrYmTgylWqrU8sFngMbM3Zz7fAA3ztkHsJG3s7XK2mvOm_GCIHfjuxIIFMMLqoylBqy4mEHLP37GclAijttMSJCRR0Dy4I"/>
+</div>
+</header>
+<main class="pt-24 px-6 max-w-lg mx-auto space-y-8">
+<!-- Welcome Section: Bento Card -->
+<section class="relative overflow-hidden bg-primary-container rounded-3xl p-8 text-white shadow-xl shadow-primary/20">
+<div class="relative z-10">
+<p class="font-label text-sm uppercase tracking-widest opacity-80 mb-2">Estado Actual</p>
+<h2 class="text-4xl font-extrabold tracking-tight mb-4 leading-none">Hola, {{atletas/nombre_completo}}! 👋</h2>
+<div class="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
+<span class="material-symbols-outlined text-lg" data-icon="sports_volleyball" style="font-variation-settings: 'FILL' 1;">sports_volleyball</span>
+<span class="font-semibold text-sm tracking-wide">{{atletas/disciplina}}</span>
+</div>
+</div>
+<!-- Decorative Element -->
+<div class="absolute -right-12 -bottom-12 w-48 h-48 bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl"></div>
+</section>
+<!-- Quick Actions: Asymmetric Buttons -->
+<section class="grid grid-cols-2 gap-4">
+<button class="flex flex-col items-start justify-between p-5 bg-surface-container-lowest rounded-[2rem] shadow-[0_8px_30px_rgba(0,0,0,0.04)] active:scale-95 transition-all text-left group">
+<div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-6 group-hover:bg-primary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-2xl" data-icon="play_circle" style="font-variation-settings: 'FILL' 1;">play_circle</span>
+</div>
+<div>
+<span class="block text-on-surface font-bold text-lg leading-tight">Iniciar Entrenamiento</span>
+<span class="text-on-surface-variant text-xs mt-1 block">Sesión IA personalizada</span>
+</div>
+</button>
+<button class="flex flex-col items-start justify-between p-5 bg-surface-container-lowest rounded-[2rem] shadow-[0_8px_30px_rgba(0,0,0,0.04)] active:scale-95 transition-all text-left group">
+<div class="w-12 h-12 rounded-2xl bg-tertiary/10 flex items-center justify-center text-tertiary mb-6 group-hover:bg-tertiary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-2xl" data-icon="emoji_events" style="font-variation-settings: 'FILL' 1;">emoji_events</span>
+</div>
+<div>
+<span class="block text-on-surface font-bold text-lg leading-tight">Ver Torneo Próximo</span>
+<span class="text-on-surface-variant text-xs mt-1 block">Copa Regional 2024</span>
+</div>
+</button>
+</section>
+<!-- Summary Section: Performance Metrics -->
+<section class="space-y-4">
+<div class="flex justify-between items-end">
+<h3 class="text-xl font-bold text-on-surface">Rendimiento Semanal</h3>
+<span class="text-primary text-sm font-bold">85% Completado</span>
+</div>
+<div class="bg-surface-container-low rounded-3xl p-6 space-y-6">
+<!-- Progress Bar -->
+<div class="space-y-3">
+<div class="flex justify-between text-xs font-bold text-on-surface-variant uppercase tracking-tighter">
+<span>Meta de Entrenamiento</span>
+<span>4 / 5 Sesiones</span>
+</div>
+<div class="w-full h-3 bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-primary-container w-[80%] rounded-full"></div>
+</div>
+</div>
+<!-- Metrics Grid -->
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container-lowest p-4 rounded-2xl border-none">
+<span class="material-symbols-outlined text-primary mb-2 block" data-icon="timer">timer</span>
+<span class="block text-2xl font-black text-on-surface">12.4h</span>
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Tiempo Total</span>
+</div>
+<div class="bg-surface-container-lowest p-4 rounded-2xl border-none">
+<span class="material-symbols-outlined text-tertiary mb-2 block" data-icon="local_fire_department">local_fire_department</span>
+<span class="block text-2xl font-black text-on-surface">3.2k</span>
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Calorías</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Today's Session Highlight -->
+<section class="pb-8">
+<h3 class="text-xl font-bold text-on-surface mb-4">Siguiente Desafío</h3>
+<div class="relative bg-surface-container-lowest rounded-3xl overflow-hidden shadow-[0_12px_40px_rgba(0,26,64,0.06)]">
+<div class="h-32 w-full relative">
+<img alt="Volleyball Session" class="w-full h-full object-cover" data-alt="Close up of a professional volleyball on a polished indoor court with dramatic stadium lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjWF0RyoXPqJRRoXa0K-VKhar3fmYkaajRph7uECSxjhvx8jpQVSTCW5XfoNOIRbiZU5HbA8LWb3snu9AbjC5yQbg4W1yCA0861XcaBspN1jdycnXKQvf53Ncrc6ubkjJsoLfA4eaoV-o3n1AAiMHgIp-XFoXHegW7LKZQ0BgA2lB38kq9uGRBW2hXz21aE1JFZPytjNLhbFinkEOvhTWvJ5KIlAX3yL4wX3boN2kib5beyyUFovqUllf8T4dhcOV5Ll5SuSViwXg"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+<div class="absolute bottom-4 left-6 text-white font-bold text-lg">Técnica de Saque Potente</div>
+</div>
+<div class="p-6 flex justify-between items-center">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="schedule">schedule</span>
+</div>
+<span class="font-bold text-on-surface text-sm">Hoy, 18:30 PM</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-end pb-6 pt-3 px-4 bg-white dark:bg-slate-950 shadow-[0_-8px_30px_rgba(0,0,0,0.04)]">
+<!-- Dashboard (Active) -->
+<a class="flex flex-col items-center justify-center bg-gradient-to-br from-blue-600 to-blue-800 text-white rounded-full px-5 py-2 scale-110 -translate-y-1 shadow-lg active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-inter text-[10px] font-bold tracking-wide">Dashboard</span>
+</a>
+<!-- Entrenamiento -->
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-2 hover:text-blue-500 transition-all active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="fitness_center">fitness_center</span>
+<span class="font-inter text-[10px] font-bold tracking-wide">Entrenamiento</span>
+</a>
+<!-- Torneos -->
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-2 hover:text-blue-500 transition-all active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="emoji_events">emoji_events</span>
+<span class="font-inter text-[10px] font-bold tracking-wide">Torneos</span>
+</a>
+<!-- Perfil -->
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 px-4 py-2 hover:text-blue-500 transition-all active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-inter text-[10px] font-bold tracking-wide">Perfil</span>
+</a>
+</nav>
+</body></html>
