@@ -12,7 +12,20 @@
           "package_name": "com.omnisportai.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "430589318678-cgdk6cv2a5ou0ehijjvkj145vd7s039h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.omnisportai.app",
+            "certificate_hash": "7a94b5707f0469ad231cb95742a3bf3cbe1eb235"
+          }
+        },
+        {
+          "client_id": "430589318678-vvjddb5b9fpieq7dlodcloe1a3fkbtqp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyD1dkg3tNBrFt-a6ztd4avVIOKnm2bO-Ng"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "430589318678-vvjddb5b9fpieq7dlodcloe1a3fkbtqp.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "430589318678-gkhq2kj0aft29o76etbegv2o8po3trev.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.omnisportai.app"
+              }
+            }
+          ]
         }
       }
     }

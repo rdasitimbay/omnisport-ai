@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/login_screen.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -12,19 +15,32 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
     
-    // Inicio de sesión anónimo automático para habilitar permisos de Storage
-    try {
-      await FirebaseAuth.instance.signInAnonymously();
-      debugPrint("Firebase Auth: Sesión iniciada de forma anónima.");
-    } on FirebaseAuthException catch (authError) {
-      if (authError.code == 'configuration-not-found') {
-        debugPrint("AVISO: Para subir fotos, habilita el inicio de sesión 'Anónimo' en tu consola de Firebase.");
-      } else {
-        debugPrint("Firebase Auth Error: ${authError.code} - ${authError.message}");
+    // 1. Configurar Persistencia Inmediata
+    if (kIsWeb) {
+      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+      
+      // 2. Capturar resultado de redirección ANTES de arrancar la App
+      // Esto evita que authStateChanges emita null erróneamente durante la carga
+      final redirectResult = await FirebaseAuth.instance.getRedirectResult();
+      if (redirectResult.user != null) {
+        debugPrint("Redirect detectado con éxito: ${redirectResult.user?.email}");
       }
     }
+    
+    // 3. Configuración básica de Notificaciones Push
+    final messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint("Notificación recibida en primer plano: ${message.notification?.title}");
+    });
+
   } catch (e) {
-    debugPrint("Firebase initialization failed. Error: $e");
+    debugPrint("Firebase init error: $e");
   }
 
   runApp(const OmniSportApp());
@@ -37,14 +53,25 @@ class OmniSportApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'OmniSport-AI',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF003F87)),
         useMaterial3: true,
         fontFamily: 'Inter',
       ),
-      home: const DashboardScreen(
-        // Este es un ID de prueba (mock) para leer de Firestore
-        currentAthleteId: 'athlete_demo_123',
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          }
+          if (snapshot.hasData) {
+            return DashboardScreen(
+              currentAthleteId: snapshot.data!.uid, 
+            );
+          }
+          return const LoginScreen();
+        },
       ),
     );
   }

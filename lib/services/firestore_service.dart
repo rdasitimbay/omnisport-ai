@@ -3,7 +3,42 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  // Stream para leer los datos del primer atleta en la colección
+  // Obtener o crear datos de un atleta específico por su UID
+  Stream<DocumentSnapshot<Map<String, dynamic>>> getAthleteData(String uid) {
+    return _db.collection('atletas').doc(uid).snapshots();
+  }
+
+  // Crear un perfil básico para un nuevo usuario social
+  Future<void> ensureAthleteProfile(String uid, {String? nombre, String? email}) async {
+    final doc = await _db.collection('atletas').doc(uid).get();
+    if (!doc.exists) {
+      await _db.collection('atletas').doc(uid).set({
+        'nombre_completo': nombre ?? 'Nuevo Atleta',
+        'email': email ?? '',
+        'disciplina': 'Voleibol', // Disciplina por defecto
+        'rol': 'atleta',
+        'fecha_registro': FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>> getOrCreateAthleteData(String uid) async {
+    final docRef = _db.collection('atletas').doc(uid);
+    final doc = await docRef.get();
+    if (!doc.exists) {
+      await docRef.set({
+        'nombre_completo': 'Nuevo Atleta',
+        'email': '',
+        'disciplina': 'Voleibol',
+        'rol': 'atleta',
+        'fecha_registro': FieldValue.serverTimestamp(),
+      });
+      return await docRef.get();
+    }
+    return doc;
+  }
+
+  // Stream para leer los datos del primer atleta (Deprecando el uso estático)
   Stream<QuerySnapshot<Map<String, dynamic>>> getFirstAthleteData() {
     return _db.collection('atletas').limit(1).snapshots();
   }
@@ -23,5 +58,31 @@ class FirestoreService {
           ...sessionData,
           'fecha': FieldValue.serverTimestamp(),
         });
+  }
+
+  // Obtener posiciones del torneo ordenadas por posición (1, 2, 3...)
+  Stream<QuerySnapshot<Map<String, dynamic>>> getTournamentStandings() {
+    return _db.collection('posiciones_torneo').orderBy('puntos', descending: true).snapshots();
+  }
+
+  // Cargar datos de prueba para el torneo (Seed)
+  Future<void> seedTournamentData() async {
+    final batch = _db.batch();
+    final collection = _db.collection('posiciones_torneo');
+
+    final teams = [
+      {'equipo': 'Titanes VC', 'puntos': 15, 'partidos_jugados': 5, 'posicion': 1},
+      {'equipo': 'Raptors Volei', 'puntos': 12, 'partidos_jugados': 5, 'posicion': 2},
+      {'equipo': 'Fénix Azul', 'puntos': 10, 'partidos_jugados': 5, 'posicion': 3},
+      {'equipo': 'Linces del Norte', 'puntos': 7, 'partidos_jugados': 5, 'posicion': 4},
+      {'equipo': 'Spartans Sport', 'puntos': 4, 'partidos_jugados': 5, 'posicion': 5},
+    ];
+
+    for (var team in teams) {
+      final docRef = collection.doc();
+      batch.set(docRef, team);
+    }
+
+    return batch.commit();
   }
 }

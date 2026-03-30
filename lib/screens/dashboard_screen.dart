@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firestore_service.dart';
 import 'training_screen.dart';
 import 'profile_screen.dart';
+import 'tablas_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class DashboardScreen extends StatefulWidget {
   final String currentAthleteId; // Por ahora, pasamos el ID estáticamente o de auth
@@ -18,8 +20,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _firestoreService.getFirstAthleteData(),
+    final user = FirebaseAuth.instance.currentUser;
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _firestoreService.getAthleteData(widget.currentAthleteId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -33,15 +37,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             body: Center(child: Text("Error al cargar atletas")),
           );
         }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          // Si el atleta no existe, creamos uno básico y seguimos esperando
+          _firestoreService.ensureAthleteProfile(
+            widget.currentAthleteId,
+            nombre: user?.displayName,
+            email: user?.email,
+          );
           return const Scaffold(
             backgroundColor: Color(0xFFF8F9FA),
-            body: Center(child: Text("Atleta no encontrado")),
+            body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        final athleteDoc = snapshot.data!.docs.first;
-        final athleteData = athleteDoc.data();
+        final athleteDoc = snapshot.data!;
+        final athleteData = athleteDoc.data()!;
         final String nombre = athleteData['nombre_completo'] ?? athleteData['nombre'] ?? 'Desconocido';
         final String disciplina = athleteData['disciplina'] ?? 'Sin disciplina';
 
@@ -49,9 +59,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           backgroundColor: const Color(0xFFF8F9FA),
           appBar: AppBar(
             title: const Text('OmniSport-AI',
-                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF003F87))),
             backgroundColor: Colors.white,
             elevation: 0,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.logout, color: Colors.redAccent),
+                onPressed: () => FirebaseAuth.instance.signOut(),
+              ),
+            ],
           ),
           body: SingleChildScrollView(
             child: Padding(
@@ -172,7 +188,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         const SizedBox(width: 16),
         Expanded(
-          child: _actionCard("Ver Torneo", "Próximo Evento", Icons.emoji_events, Colors.orange),
+          child: GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const TablasScreen()),
+              );
+            },
+            child: _actionCard("Ver Torneo", "Próximo Evento", Icons.emoji_events, Colors.orange),
+          ),
         ),
       ],
     );
