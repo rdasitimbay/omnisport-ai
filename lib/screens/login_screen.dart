@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter/foundation.dart';
+import 'terms_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,6 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _isLogin = true;
+  bool _acceptedTerms = false;
 
   @override
   void initState() {
@@ -167,12 +169,38 @@ class _LoginScreenState extends State<LoginScreen> {
                             prefixIcon: Icon(Icons.lock),
                           ),
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 8),
+                        CheckboxListTile(
+                          value: _acceptedTerms,
+                          onChanged: (value) {
+                            setState(() => _acceptedTerms = value ?? false);
+                          },
+                          title: GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const TermsScreen()),
+                              );
+                            },
+                            child: const Text(
+                              'He leído y acepto los Términos de Uso y Política de Privacidad',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.blue,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          contentPadding: EdgeInsets.zero,
+                          activeColor: const Color(0xFF003F87),
+                        ),
+                        const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,
                           height: 50,
                           child: ElevatedButton(
-                            onPressed: _isLoading ? null : _submit,
+                            onPressed: (_isLoading || !_acceptedTerms) ? null : _submit,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF003F87),
                               foregroundColor: Colors.white,
@@ -202,14 +230,14 @@ class _LoginScreenState extends State<LoginScreen> {
                               icon: Icons.g_mobiledata,
                               color: Colors.red,
                               label: 'Google',
-                              onPressed: _signInWithGoogle,
+                              onPressed: (_isLoading || !_acceptedTerms) ? null : _signInWithGoogle,
                             ),
                             const SizedBox(width: 20),
                             _socialButton(
                               icon: Icons.apple,
                               color: Colors.black,
                               label: 'Apple',
-                              onPressed: _signInWithApple,
+                              onPressed: (_isLoading || !_acceptedTerms) ? null : _signInWithApple,
                             ),
                           ],
                         ),
@@ -230,9 +258,9 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _socialButton({required IconData icon, required Color color, required String label, required VoidCallback onPressed}) {
+  Widget _socialButton({required IconData icon, required Color color, required String label, VoidCallback? onPressed}) {
     return InkWell(
-      onTap: _isLoading ? null : onPressed,
+      onTap: onPressed,
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(

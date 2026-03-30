@@ -18,6 +18,8 @@ class FirestoreService {
         'disciplina': 'Voleibol', // Disciplina por defecto
         'rol': 'atleta',
         'fecha_registro': FieldValue.serverTimestamp(),
+        'consentimiento_lopdp': true,
+        'fecha_consentimiento': FieldValue.serverTimestamp(),
       });
     }
   }
@@ -32,6 +34,8 @@ class FirestoreService {
         'disciplina': 'Voleibol',
         'rol': 'atleta',
         'fecha_registro': FieldValue.serverTimestamp(),
+        'consentimiento_lopdp': true,
+        'fecha_consentimiento': FieldValue.serverTimestamp(),
       });
       return await docRef.get();
     }

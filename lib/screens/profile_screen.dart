@@ -5,6 +5,7 @@ import 'dart:convert';
 import '../services/firestore_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'terms_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String athleteId;
@@ -166,6 +167,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 48),
                 _buildInfoCard(currentPhone),
+                const SizedBox(height: 40),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const TermsScreen()),
+                    );
+                  },
+                  child: const Text(
+                    'Ver Políticas de Privacidad y Términos',
+                    style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline),
+                  ),
+                ),
+                const SizedBox(height: 24),
               ],
             ),
           );
