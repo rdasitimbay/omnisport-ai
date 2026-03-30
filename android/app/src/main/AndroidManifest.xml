@@ -9,7 +9,7 @@
     </queries>
 
     <application
-        android:label="app"
+        android:label="OmniSport-AI"
         android:name="${applicationName}"
         android:requestLegacyExternalStorage="true"
         android:icon="@mipmap/ic_launcher">
