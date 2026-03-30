@@ -6,6 +6,7 @@ import '../services/firestore_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'terms_screen.dart';
+import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String athleteId;
@@ -180,7 +181,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () => _showDeleteConfirmationDialog(),
+                  child: const Text(
+                    'Eliminar mi cuenta y mis datos',
+                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(height: 48),
               ],
             ),
           );
@@ -364,6 +373,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 if (context.mounted) Navigator.pop(context);
               },
               child: const Text('Guardar'),
+            ),
+          ],
+        );
+      }
+    );
+  }
+
+  Future<void> _showDeleteConfirmationDialog() async {
+    return showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('¿Estás seguro?', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+          content: const Text('Esta acción borrará permanentemente tu perfil, fotos y rutinas de entrenamiento.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  final user = FirebaseAuth.instance.currentUser;
+                  if (user != null) {
+                    await _firestoreService.deleteAthleteData(user.uid);
+                    await user.delete();
+                  }
+                  
+                  if (context.mounted) {
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (context) => const LoginScreen()),
+                      (route) => false,
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error al eliminar: $e. Puede que necesites reconectarte recientemente para esta acción.'), backgroundColor: Colors.red),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+              child: const Text('Eliminar'),
             ),
           ],
         );

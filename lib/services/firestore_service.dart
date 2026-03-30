@@ -52,6 +52,11 @@ class FirestoreService {
     return _db.collection('atletas').doc(athleteId).set(data, SetOptions(merge: true));
   }
 
+  // Eliminar todos los datos del atleta de Firestore (ARCO - Cancelación)
+  Future<void> deleteAthleteData(String uid) {
+    return _db.collection('atletas').doc(uid).delete();
+  }
+
   // Añade un registro de sesión de entrenamiento al historial del atleta
   Future<void> addTrainingSession(String athleteId, Map<String, dynamic> sessionData) {
     return _db
