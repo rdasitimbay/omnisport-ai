@@ -5,6 +5,7 @@ import 'dart:convert';
 import '../services/firestore_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'terms_screen.dart';
 import 'login_screen.dart';
 
@@ -398,7 +399,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   final user = FirebaseAuth.instance.currentUser;
                   if (user != null) {
                     await _firestoreService.deleteAthleteData(user.uid);
+                    try {
+                      await GoogleSignIn().signOut();
+                      await GoogleSignIn().disconnect();
+                    } catch (_) {}
                     await user.delete();
+                    await FirebaseAuth.instance.signOut();
                   }
                   
                   if (context.mounted) {

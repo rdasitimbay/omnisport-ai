@@ -42,6 +42,12 @@ class _LoginScreenState extends State<LoginScreen> {
           await FirebaseAuth.instance.signInWithCredential(credential);
         }
       }
+    } on FirebaseAuthException catch (e) {
+      String message = 'Error al ingresar con Google';
+      if (e.code == 'user-not-found' || e.code == 'invalid-credential' || e.code == 'user-disabled') {
+        message = 'Cuenta no encontrada o inválida. Por favor, regístrate de nuevo';
+      }
+      _showError(message);
     } catch (e) {
       _showError('Error al ingresar con Google: $e');
     } finally {
@@ -100,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } on FirebaseAuthException catch (e) {
       String message = 'Ocurrió un error';
-      if (e.code == 'user-not-found') message = 'Usuario no encontrado';
+      if (e.code == 'user-not-found') message = 'Cuenta no encontrada. Por favor, regístrate de nuevo';
       if (e.code == 'wrong-password') message = 'Contraseña incorrecta';
       if (e.code == 'email-already-in-use') message = 'El email ya está en uso';
       if (e.code == 'weak-password') message = 'La contraseña es muy débil';
