@@ -67,8 +67,10 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>OmniSport-AI necesita acceso a tu galería para personalizar tu foto de perfil.</string>
+	<string>Necesitamos acceso a tu galería para que selecciones una foto para tu perfil de usuario.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>OmniSport-AI necesita acceso a tu cámara para personalizar tu foto de perfil.</string>
+	<string>OmniSport-AI utiliza la cámara para que captures tu foto de perfil de atleta y personalices tu experiencia de entrenamiento.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Este permiso es necesario para funciones futuras de comandos de voz en tus rutinas de entrenamiento.</string>
 </dict>
 </plist>
