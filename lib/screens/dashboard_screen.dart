@@ -34,7 +34,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (snapshot.hasError) {
           return const Scaffold(
             backgroundColor: Color(0xFFF8F9FA),
-            body: Center(child: Text("Error al cargar atletas")),
+            body: Center(child: Text("Error al cargar data de athletes")),
           );
         }
         if (!snapshot.hasData || !snapshot.data!.exists) {
@@ -52,7 +52,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         final athleteDoc = snapshot.data!;
         final athleteData = athleteDoc.data()!;
-        final String nombre = athleteData['nombre_completo'] ?? athleteData['nombre'] ?? 'Desconocido';
+        final String nombre = athleteData['full_name'] ?? athleteData['nombre_completo'] ?? athleteData['nombre'] ?? 'Desconocido';
         final String disciplina = athleteData['disciplina'] ?? 'Sin disciplina';
 
         return Scaffold(

@@ -49,7 +49,7 @@ class FirebaseStorageService {
       final String downloadUrl = await snapshot.ref.getDownloadURL();
 
       // Actualizar el photoUrl directamente en el documento del atleta en Firestore
-      await _firestore.collection('atletas').doc(athleteId).update({
+      await _firestore.collection('athletes').doc(athleteId).update({
         'photoUrl': downloadUrl,
         'lastUpdated': FieldValue.serverTimestamp(),
       });

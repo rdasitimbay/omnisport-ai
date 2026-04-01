@@ -5,16 +5,18 @@ class FirestoreService {
 
   // Obtener o crear datos de un atleta específico por su UID
   Stream<DocumentSnapshot<Map<String, dynamic>>> getAthleteData(String uid) {
-    return _db.collection('atletas').doc(uid).snapshots();
+    return _db.collection('athletes').doc(uid).snapshots();
   }
 
   // Crear un perfil básico para un nuevo usuario social
   Future<void> ensureAthleteProfile(String uid, {String? nombre, String? email}) async {
-    final doc = await _db.collection('atletas').doc(uid).get();
+    final doc = await _db.collection('athletes').doc(uid).get();
     if (!doc.exists) {
-      await _db.collection('atletas').doc(uid).set({
-        'nombre_completo': nombre ?? 'Nuevo Atleta',
+      await _db.collection('athletes').doc(uid).set({
+        'full_name': nombre ?? 'Nuevo Atleta',
         'email': email ?? '',
+        'gender': '',
+        'birth_date': null,
         'disciplina': 'Voleibol', // Disciplina por defecto
         'rol': 'atleta',
         'fecha_registro': FieldValue.serverTimestamp(),
@@ -25,12 +27,14 @@ class FirestoreService {
   }
 
   Future<DocumentSnapshot<Map<String, dynamic>>> getOrCreateAthleteData(String uid) async {
-    final docRef = _db.collection('atletas').doc(uid);
+    final docRef = _db.collection('athletes').doc(uid);
     final doc = await docRef.get();
     if (!doc.exists) {
       await docRef.set({
-        'nombre_completo': 'Nuevo Atleta',
+        'full_name': 'Nuevo Atleta',
         'email': '',
+        'gender': '',
+        'birth_date': null,
         'disciplina': 'Voleibol',
         'rol': 'atleta',
         'fecha_registro': FieldValue.serverTimestamp(),
@@ -44,23 +48,23 @@ class FirestoreService {
 
   // Stream para leer los datos del primer atleta (Deprecando el uso estático)
   Stream<QuerySnapshot<Map<String, dynamic>>> getFirstAthleteData() {
-    return _db.collection('atletas').limit(1).snapshots();
+    return _db.collection('athletes').limit(1).snapshots();
   }
 
   // Futura expansión para escribir datos
   Future<void> updateAthleteData(String athleteId, Map<String, dynamic> data) {
-    return _db.collection('atletas').doc(athleteId).set(data, SetOptions(merge: true));
+    return _db.collection('athletes').doc(athleteId).set(data, SetOptions(merge: true));
   }
 
   // Eliminar todos los datos del atleta de Firestore (ARCO - Cancelación)
   Future<void> deleteAthleteData(String uid) {
-    return _db.collection('atletas').doc(uid).delete();
+    return _db.collection('athletes').doc(uid).delete();
   }
 
   // Añade un registro de sesión de entrenamiento al historial del atleta
   Future<void> addTrainingSession(String athleteId, Map<String, dynamic> sessionData) {
     return _db
-        .collection('atletas')
+        .collection('athletes')
         .doc(athleteId)
         .collection('historial_entrenamientos')
         .add({
