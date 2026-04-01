@@ -149,7 +149,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           
           final data = snapshot.data!.data() ?? {};
           final String currentPhotoBase64 = data['photoBase64'] ?? widget.photoBase64 ?? '';
-          final String currentPhone = data['telefono'] ?? '';
+          final String currentPhone = data['phone'] ?? data['telefono'] ?? '';
 
           return SingleChildScrollView(
             child: Column(
@@ -369,7 +369,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onPressed: () async {
                 final newPhone = controller.text.trim();
                 await _firestoreService.updateAthleteData(widget.athleteId, {
-                  'telefono': newPhone,
+                  'phone': newPhone,
                 });
                 if (context.mounted) Navigator.pop(context);
               },

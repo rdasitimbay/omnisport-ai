@@ -5,13 +5,13 @@ import '../services/firestore_service.dart';
 class TrainingScreen extends StatefulWidget {
   final String athleteId;
   final String athleteName;
-  final String discipline;
+  final String sport;
 
   const TrainingScreen({
     Key? key,
     required this.athleteId,
     required this.athleteName,
-    required this.discipline,
+    required this.sport,
   }) : super(key: key);
 
   @override
@@ -29,7 +29,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
   @override
   void initState() {
     super.initState();
-    _routineFuture = _aiService.generateTrainingRoutine(widget.athleteName, widget.discipline);
+    _routineFuture = _aiService.generateTrainingRoutine(widget.athleteName, widget.sport);
   }
 
   bool get _allCompleted => _completedExercises != null && _completedExercises!.every((e) => e);
@@ -41,7 +41,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
     try {
       await _firestoreService.addTrainingSession(widget.athleteId, {
-        'disciplina': widget.discipline,
+        'sport': widget.sport,
         'ejercicios_completados': exercises.length,
         'atleta': widget.athleteName,
         'tipo': 'IA Generated',
@@ -118,7 +118,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
           Text('Error: $error'),
           TextButton(
             onPressed: () => setState(() {
-              _routineFuture = _aiService.generateTrainingRoutine(widget.athleteName, widget.discipline);
+              _routineFuture = _aiService.generateTrainingRoutine(widget.athleteName, widget.sport);
               _completedExercises = null;
             }),
             child: const Text('Reintentar'),
@@ -185,7 +185,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
       elevation: 0,
       backgroundColor: const Color(0xFF003F87),
       flexibleSpace: FlexibleSpaceBar(
-        title: Text('${widget.athleteName} - ${widget.discipline}', 
+        title: Text('${widget.athleteName} - ${widget.sport}', 
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         centerTitle: true,
       ),

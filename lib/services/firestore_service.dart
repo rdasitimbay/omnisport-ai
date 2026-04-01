@@ -17,7 +17,7 @@ class FirestoreService {
         'email': email ?? '',
         'gender': '',
         'birth_date': null,
-        'disciplina': 'Voleibol', // Disciplina por defecto
+        'sport': 'Voleibol', // Disciplina por defecto
         'rol': 'atleta',
         'fecha_registro': FieldValue.serverTimestamp(),
         'consentimiento_lopdp': true,
@@ -35,7 +35,7 @@ class FirestoreService {
         'email': '',
         'gender': '',
         'birth_date': null,
-        'disciplina': 'Voleibol',
+        'sport': 'Voleibol',
         'rol': 'atleta',
         'fecha_registro': FieldValue.serverTimestamp(),
         'consentimiento_lopdp': true,

@@ -53,7 +53,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final athleteDoc = snapshot.data!;
         final athleteData = athleteDoc.data()!;
         final String nombre = athleteData['full_name'] ?? athleteData['nombre_completo'] ?? athleteData['nombre'] ?? 'Desconocido';
-        final String disciplina = athleteData['disciplina'] ?? 'Sin disciplina';
+        final String sport = athleteData['sport'] ?? athleteData['disciplina'] ?? 'Sin disciplina';
 
         return Scaffold(
           backgroundColor: const Color(0xFFF8F9FA),
@@ -75,9 +75,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildWelcomeCard(nombre, disciplina),
+                  _buildWelcomeCard(nombre, sport),
                   const SizedBox(height: 24),
-                  _buildQuickActions(athleteDoc.id, nombre, disciplina),
+                  _buildQuickActions(athleteDoc.id, nombre, sport),
                   const SizedBox(height: 24),
                   _buildWeeklyPerformance(),
                 ],
@@ -101,7 +101,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     builder: (context) => TrainingScreen(
                       athleteId: athleteDoc.id,
                       athleteName: nombre,
-                      discipline: disciplina,
+                      sport: sport,
                     ),
                   ),
                 );
@@ -129,7 +129,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildWelcomeCard(String nombre, String disciplina) {
+  Widget _buildWelcomeCard(String nombre, String sport) {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF003F87), // primary container equivalent
@@ -157,7 +157,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 const Icon(Icons.sports_volleyball, color: Colors.white, size: 18),
                 const SizedBox(width: 8),
-                Text(disciplina, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                Text(sport, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -166,7 +166,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildQuickActions(String athleteId, String nombre, String disciplina) {
+  Widget _buildQuickActions(String athleteId, String nombre, String sport) {
     return Row(
       children: [
         Expanded(
@@ -178,7 +178,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   builder: (context) => TrainingScreen(
                     athleteId: athleteId,
                     athleteName: nombre,
-                    discipline: disciplina,
+                    sport: sport,
                   ),
                 ),
               );
