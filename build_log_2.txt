@@ -28,43 +28,8 @@ Invalid depfile: /Users/sgia/Library/CloudStorage/OneDrive-Personal/2026/Antigra
 Invalid depfile: /Users/sgia/Library/CloudStorage/OneDrive-Personal/2026/Antigravity/omnisport-ai/.dart_tool/flutter_build/38b34351719d3b6941558fb847a05103/kernel_snapshot_program.d
 Invalid depfile: /Users/sgia/Library/CloudStorage/OneDrive-Personal/2026/Antigravity/omnisport-ai/.dart_tool/flutter_build/38b34351719d3b6941558fb847a05103/kernel_snapshot_program.d
 Invalid depfile: /Users/sgia/Library/CloudStorage/OneDrive-Personal/2026/Antigravity/omnisport-ai/.dart_tool/flutter_build/38b34351719d3b6941558fb847a05103/kernel_snapshot_program.d
-Error: Couldn't resolve the package 'intl' in 'package:intl/intl.dart'.
-lib/screens/profile_screen.dart:9:8: Error: Not found: 'package:intl/intl.dart'
-import 'package:intl/intl.dart';
-       ^
-lib/screens/profile_screen.dart:307:23: Error: The method 'DateFormat' isn't defined for the type '_ProfileScreenState'.
- - '_ProfileScreenState' is from 'package:app/screens/profile_screen.dart' ('lib/screens/profile_screen.dart').
-Try correcting the name to the name of an existing method, or defining a method named 'DateFormat'.
-                    : DateFormat('dd / MM / yyyy').format(_selectedDate!),
-                      ^^^^^^^^^^
-Unhandled exception:
-FileSystemException(uri=org-dartlang-untranslatable-uri:package%3Aintl%2Fintl.dart; message=StandardFileSystem only supports file:* and data:* URIs)
-#0      StandardFileSystem.entityForUri (package:front_end/src/api_prototype/standard_file_system.dart:45)
-#1      asFileUri (package:vm/kernel_front_end.dart:1038)
-#2      writeDepfile (package:vm/kernel_front_end.dart:1201)
-<asynchronous suspension>
-#3      FrontendCompiler.compile (package:frontend_server/frontend_server.dart:751)
-<asynchronous suspension>
-#4      starter (package:frontend_server/starter.dart:102)
-<asynchronous suspension>
-#5      main (file:///Volumes/Work/s/w/ir/x/w/sdk/pkg/frontend_server/bin/frontend_server_starter.dart:13)
-<asynchronous suspension>
-
-Target kernel_snapshot_program failed: Exception
-
-
-FAILURE: Build failed with an exception.
-
-* What went wrong:
-Execution failed for task ':app:compileFlutterBuildRelease'.
-> Process 'command '/Users/sgia/development/flutter/bin/flutter'' finished with non-zero exit value 1
-
-* Try:
-> Run with --stacktrace option to get the stack trace.
-> Run with --info or --debug option to get more log output.
-> Run with --scan to get full insights.
-> Get more help at https://help.gradle.org.
-
-BUILD FAILED in 5s
-Running Gradle task 'assembleRelease'...                            5,4s
-Gradle task assembleRelease failed with exit code 1
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 4936 bytes (99.7% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Running Gradle task 'assembleRelease'...                          129,2s
+✓ Built build/app/outputs/flutter-apk/app-release.apk (53.6MB)

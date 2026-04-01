@@ -20,8 +20,8 @@ class FirestoreService {
         'sport': 'Voleibol', // Disciplina por defecto
         'rol': 'atleta',
         'fecha_registro': FieldValue.serverTimestamp(),
-        'consentimiento_lopdp': true,
-        'fecha_consentimiento': FieldValue.serverTimestamp(),
+        'is_compliant_LOPDP': true,
+        'accepted_terms_at': FieldValue.serverTimestamp(),
       });
     }
   }
@@ -38,8 +38,8 @@ class FirestoreService {
         'sport': 'Voleibol',
         'rol': 'atleta',
         'fecha_registro': FieldValue.serverTimestamp(),
-        'consentimiento_lopdp': true,
-        'fecha_consentimiento': FieldValue.serverTimestamp(),
+        'is_compliant_LOPDP': true,
+        'accepted_terms_at': FieldValue.serverTimestamp(),
       });
       return await docRef.get();
     }
@@ -51,9 +51,30 @@ class FirestoreService {
     return _db.collection('athletes').limit(1).snapshots();
   }
 
-  // Futura expansión para escribir datos
+  // Actualización simple a la raíz
   Future<void> updateAthleteData(String athleteId, Map<String, dynamic> data) {
+    data['updated_at'] = FieldValue.serverTimestamp();
     return _db.collection('athletes').doc(athleteId).set(data, SetOptions(merge: true));
+  }
+
+  // Refactor Maestro ERP - Upsert Jerárquico Strategy Pattern Transaccional
+  Future<void> upsertAthleteProfile(String uid, Map<String, dynamic> rootData, Map<String, dynamic> sportData) async {
+    final batch = _db.batch();
+
+    // 1. Instancia de la raíz
+    final rootRef = _db.collection('athletes').doc(uid);
+    rootData['updated_at'] = FieldValue.serverTimestamp();
+    batch.set(rootRef, rootData, SetOptions(merge: true));
+
+    // 2. Instancia de la Sub-Colección `sport_details/volleyball` (Strategy Pattern)
+    if (sportData.containsKey('sport_type')) {
+      final String sportId = sportData['sport_type'].toString().toLowerCase();
+      final sportRef = rootRef.collection('sport_details').doc(sportId);
+      sportData['updated_at'] = FieldValue.serverTimestamp();
+      batch.set(sportRef, sportData, SetOptions(merge: true));
+    }
+
+    await batch.commit();
   }
 
   // Eliminar todos los datos del atleta de Firestore (ARCO - Cancelación)
@@ -75,13 +96,13 @@ class FirestoreService {
 
   // Obtener posiciones del torneo ordenadas por posición (1, 2, 3...)
   Stream<QuerySnapshot<Map<String, dynamic>>> getTournamentStandings() {
-    return _db.collection('posiciones_torneo').orderBy('puntos', descending: true).snapshots();
+    return _db.collection('tournaments').orderBy('puntos', descending: true).snapshots();
   }
 
   // Cargar datos de prueba para el torneo (Seed)
   Future<void> seedTournamentData() async {
     final batch = _db.batch();
-    final collection = _db.collection('posiciones_torneo');
+    final collection = _db.collection('tournaments');
 
     final teams = [
       {'equipo': 'Titanes VC', 'puntos': 15, 'partidos_jugados': 5, 'posicion': 1},
