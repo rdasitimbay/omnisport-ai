@@ -4,8 +4,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/preferences_service.dart';
 import '../l10n/app_localizations.dart';
+import 'auth_gateway.dart';
 import 'login_screen.dart';
-import 'dashboard_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -23,12 +23,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     
     if (!mounted) return;
     
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => DashboardScreen(currentAthleteId: user.uid)));
-    } else {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
-    }
+    // Al completar, delegar a AuthGateway para manejar la sesión final
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const AuthGateway()),
+    );
   }
 
   void _nextPage() {

@@ -5,6 +5,7 @@ import '../services/preferences_service.dart';
 import '../l10n/app_localizations.dart';
 import '../main.dart'; // import appLocaleNotifier
 import 'onboarding_screen.dart';
+import 'auth_gateway.dart';
 
 class LanguagePickerScreen extends StatelessWidget {
   final bool fromLogin;
@@ -23,10 +24,18 @@ class LanguagePickerScreen extends StatelessWidget {
         // Retorna al login sin generar nueva pantalla en pila
         Navigator.pop(context);
       } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-        );
+        // Verificamos si ya vio onboarding
+        if (PreferencesService().hasSeenOnboarding) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const AuthGateway()),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+          );
+        }
       }
     }
   }

@@ -3,8 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/preferences_service.dart';
 import 'language_picker_screen.dart';
 import 'onboarding_screen.dart';
-import 'dashboard_screen.dart';
-import 'login_screen.dart';
+import 'auth_gateway.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -52,13 +51,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       return;
     }
 
-    // Ya vio onboarding y tiene idioma, verificamos Firebase Auth
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => DashboardScreen(currentAthleteId: user.uid)));
-    } else {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
-    }
+    // Ya vio onboarding y tiene idioma, delegamos la sesión a Firebase a través del AuthGateway
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AuthGateway()));
   }
 
   @override
