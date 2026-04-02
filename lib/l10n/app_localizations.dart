@@ -23,6 +23,26 @@ class AppLocalizations {
       'skip': 'Saltar',
       'next': 'Siguiente',
       'start': 'Empezar',
+      
+      // Login Strings
+      'login_error_google': 'Error al ingresar con Google',
+      'login_error_google_not_found': 'Cuenta no encontrada o inválida. Por favor, regístrate de nuevo',
+      'login_error_apple': 'Error al ingresar con Apple',
+      'login_fill_fields': 'Por favor completa todos los campos',
+      'login_error_generic': 'Ocurrió un error',
+      'login_error_not_found': 'Cuenta no encontrada. Por favor, regístrate de nuevo',
+      'login_error_wrong_pass': 'Contraseña incorrecta',
+      'login_error_email_used': 'El email ya está en uso',
+      'login_error_weak_pass': 'La contraseña es muy débil',
+      'login_error_not_allowed': '¡Error! Debes habilitar Email/Password en la consola de Firebase.',
+      'login_email_label': 'Correo Electrónico',
+      'login_password_label': 'Contraseña',
+      'login_terms': 'He leído y acepto los Términos de Uso y Política de Privacidad',
+      'login_button': 'Iniciar Sesión',
+      'register_button': 'Crear Cuenta',
+      'login_or': 'O ingresar con',
+      'login_toggle_register': '¿No tienes cuenta? Regístrate',
+      'login_toggle_login': '¿Ya tienes cuenta? Ingresa',
     },
     'en': {
       'language_picker_title': 'Select your language',
@@ -37,6 +57,26 @@ class AppLocalizations {
       'skip': 'Skip',
       'next': 'Next',
       'start': 'Get Started',
+      
+      // Login Strings
+      'login_error_google': 'Error signing in with Google',
+      'login_error_google_not_found': 'Account not found or invalid. Please register again',
+      'login_error_apple': 'Error signing in with Apple',
+      'login_fill_fields': 'Please fill all the fields',
+      'login_error_generic': 'An error occurred',
+      'login_error_not_found': 'Account not found. Please register again',
+      'login_error_wrong_pass': 'Incorrect password',
+      'login_error_email_used': 'Email is already in use',
+      'login_error_weak_pass': 'Password is too weak',
+      'login_error_not_allowed': 'Error! You must enable Email/Password in Firebase Console.',
+      'login_email_label': 'Email Address',
+      'login_password_label': 'Password',
+      'login_terms': 'I have read and accept the Terms of Use and Privacy Policy',
+      'login_button': 'Sign In',
+      'register_button': 'Create Account',
+      'login_or': 'Or sign in with',
+      'login_toggle_register': 'Don\'t have an account? Register',
+      'login_toggle_login': 'Already have an account? Sign in',
     },
   };
 
@@ -52,6 +92,25 @@ class AppLocalizations {
   String get skip => _localizedValues[locale.languageCode]!['skip']!;
   String get next => _localizedValues[locale.languageCode]!['next']!;
   String get start => _localizedValues[locale.languageCode]!['start']!;
+  
+  String get loginErrorGoogle => _localizedValues[locale.languageCode]!['login_error_google']!;
+  String get loginErrorGoogleNotFound => _localizedValues[locale.languageCode]!['login_error_google_not_found']!;
+  String get loginErrorApple => _localizedValues[locale.languageCode]!['login_error_apple']!;
+  String get loginFillFields => _localizedValues[locale.languageCode]!['login_fill_fields']!;
+  String get loginErrorGeneric => _localizedValues[locale.languageCode]!['login_error_generic']!;
+  String get loginErrorNotFound => _localizedValues[locale.languageCode]!['login_error_not_found']!;
+  String get loginErrorWrongPass => _localizedValues[locale.languageCode]!['login_error_wrong_pass']!;
+  String get loginErrorEmailUsed => _localizedValues[locale.languageCode]!['login_error_email_used']!;
+  String get loginErrorWeakPass => _localizedValues[locale.languageCode]!['login_error_weak_pass']!;
+  String get loginErrorNotAllowed => _localizedValues[locale.languageCode]!['login_error_not_allowed']!;
+  String get loginEmailLabel => _localizedValues[locale.languageCode]!['login_email_label']!;
+  String get loginPasswordLabel => _localizedValues[locale.languageCode]!['login_password_label']!;
+  String get loginTerms => _localizedValues[locale.languageCode]!['login_terms']!;
+  String get loginButton => _localizedValues[locale.languageCode]!['login_button']!;
+  String get registerButton => _localizedValues[locale.languageCode]!['register_button']!;
+  String get loginOr => _localizedValues[locale.languageCode]!['login_or']!;
+  String get loginToggleRegister => _localizedValues[locale.languageCode]!['login_toggle_register']!;
+  String get loginToggleLogin => _localizedValues[locale.languageCode]!['login_toggle_login']!;
 }
 
 class AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

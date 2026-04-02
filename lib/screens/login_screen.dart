@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter/foundation.dart';
+import '../l10n/app_localizations.dart';
 import 'terms_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -43,9 +44,10 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } on FirebaseAuthException catch (e) {
-      String message = 'Error al ingresar con Google';
+      final loc = AppLocalizations.of(context);
+      String message = loc.loginErrorGoogle;
       if (e.code == 'user-not-found' || e.code == 'invalid-credential' || e.code == 'user-disabled') {
-        message = 'Cuenta no encontrada o inválida. Por favor, regístrate de nuevo';
+        message = loc.loginErrorGoogleNotFound;
       }
       _showError(message);
     } catch (e) {
@@ -65,7 +67,8 @@ class _LoginScreenState extends State<LoginScreen> {
         await FirebaseAuth.instance.signInWithProvider(appleProvider);
       }
     } catch (e) {
-      _showError('Error al ingresar con Apple: $e');
+      final loc = AppLocalizations.of(context);
+      _showError('${loc.loginErrorApple}: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -84,8 +87,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
+      final loc = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor completa todos los campos')),
+        SnackBar(content: Text(loc.loginFillFields)),
       );
       return;
     }
@@ -105,13 +109,14 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } on FirebaseAuthException catch (e) {
-      String message = 'Ocurrió un error';
-      if (e.code == 'user-not-found') message = 'Cuenta no encontrada. Por favor, regístrate de nuevo';
-      if (e.code == 'wrong-password') message = 'Contraseña incorrecta';
-      if (e.code == 'email-already-in-use') message = 'El email ya está en uso';
-      if (e.code == 'weak-password') message = 'La contraseña es muy débil';
+      final loc = AppLocalizations.of(context);
+      String message = loc.loginErrorGeneric;
+      if (e.code == 'user-not-found') message = loc.loginErrorNotFound;
+      if (e.code == 'wrong-password') message = loc.loginErrorWrongPass;
+      if (e.code == 'email-already-in-use') message = loc.loginErrorEmailUsed;
+      if (e.code == 'weak-password') message = loc.loginErrorWeakPass;
       if (e.code == 'operation-not-allowed') {
-        message = '¡Error! Debes habilitar Email/Password en la consola de Firebase.';
+        message = loc.loginErrorNotAllowed;
       }
       
       ScaffoldMessenger.of(context).showSnackBar(
@@ -124,6 +129,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
+    
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -161,18 +168,18 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(
-                            labelText: 'Correo Electrónico',
-                            prefixIcon: Icon(Icons.email),
+                          decoration: InputDecoration(
+                            labelText: loc.loginEmailLabel,
+                            prefixIcon: const Icon(Icons.email),
                           ),
                         ),
                         const SizedBox(height: 16),
                         TextField(
                           controller: _passwordController,
                           obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Contraseña',
-                            prefixIcon: Icon(Icons.lock),
+                          decoration: InputDecoration(
+                            labelText: loc.loginPasswordLabel,
+                            prefixIcon: const Icon(Icons.lock),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -188,9 +195,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                 MaterialPageRoute(builder: (context) => const TermsScreen()),
                               );
                             },
-                            child: const Text(
-                              'He leído y acepto los Términos de Uso y Política de Privacidad',
-                              style: TextStyle(
+                            child: Text(
+                              loc.loginTerms,
+                              style: const TextStyle(
                                 fontSize: 12,
                                 color: Colors.blue,
                                 decoration: TextDecoration.underline,
@@ -214,7 +221,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             child: _isLoading 
                               ? const CircularProgressIndicator(color: Colors.white)
-                              : Text(_isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'),
+                              : Text(_isLogin ? loc.loginButton : loc.registerButton),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -223,7 +230,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             const Expanded(child: Divider()),
                             Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16),
-                              child: Text('O ingresar con', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                              child: Text(loc.loginOr, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                             ),
                             const Expanded(child: Divider()),
                           ],
@@ -250,7 +257,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 16),
                         TextButton(
                           onPressed: () => setState(() => _isLogin = !_isLogin),
-                          child: Text(_isLogin ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Ingresa'),
+                          child: Text(_isLogin ? loc.loginToggleRegister : loc.loginToggleLogin),
                         ),
                       ],
                     ),

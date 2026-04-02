@@ -1,4 +1,6 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/preferences_service.dart';
 import '../l10n/app_localizations.dart';
@@ -42,112 +44,153 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final loc = AppLocalizations.of(context);
     
     return Scaffold(
-      backgroundColor: Colors.white,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
           TextButton(
             onPressed: _completeOnboarding,
-            child: Text(loc.skip, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+            child: Text(loc.skip, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
           )
         ],
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                onPageChanged: (index) => setState(() => _currentPage = index),
-                children: [
-                  // Slide 1
-                  _buildSlide(
-                    icon: Icons.person_add_alt_1_outlined,
-                    title: loc.onboardingSlide1Title,
-                    description: loc.onboardingSlide1Desc,
-                  ),
-                  // Slide 2
-                  _buildSlide(
-                    icon: Icons.auto_awesome_outlined, // Representa IA
-                    title: loc.onboardingSlide2Title,
-                    description: loc.onboardingSlide2Desc,
-                  ),
-                  // Slide 3
-                  _buildSlide(
-                    icon: Icons.gavel_outlined, // Representa Legal / Seguridad
-                    title: loc.onboardingSlide3Title,
-                    description: loc.onboardingSlide3Desc,
-                  ),
-                ],
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF001F3F), Color(0xFF00E5FF)],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  onPageChanged: (index) => setState(() => _currentPage = index),
+                  children: [
+                    // Slide 1
+                    _buildSlide(
+                      icon: CupertinoIcons.person,
+                      title: loc.onboardingSlide1Title,
+                      description: loc.onboardingSlide1Desc,
+                    ),
+                    // Slide 2
+                    _buildSlide(
+                      icon: CupertinoIcons.sparkles, // Representa IA
+                      title: loc.onboardingSlide2Title,
+                      description: loc.onboardingSlide2Desc,
+                    ),
+                    // Slide 3
+                    _buildSlide(
+                      icon: CupertinoIcons.lock_shield, // Representa Legal / Seguridad
+                      title: loc.onboardingSlide3Title,
+                      description: loc.onboardingSlide3Desc,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            
-            // Paginador
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(3, (index) => _buildDot(index: index)),
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // Botón Inferior
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _nextPage,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF003F87),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  child: Text(
-                    _currentPage == 2 ? loc.start : loc.next,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              
+              // Paginador
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(3, (index) => _buildDot(index: index)),
+              ),
+              
+              const SizedBox(height: 32),
+              
+              // Botón Inferior
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _nextPage,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF003F87),
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 5,
+                      shadowColor: Colors.black45,
+                    ),
+                    child: Text(
+                      _currentPage == 2 ? loc.start : loc.next,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildSlide({required IconData icon, required String title, required String description}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 40.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 100, color: const Color(0xFF003F87)),
-          const SizedBox(height: 48),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF333333)),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32.0),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(32), // Geometría Squircle / Suave
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+            child: Container(
+              padding: const EdgeInsets.all(40.0),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(32),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.2), // Borde reflectivo 20%
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 80, color: Colors.white),
+                  const SizedBox(height: 32),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 24, 
+                      fontWeight: FontWeight.bold, 
+                      color: Colors.white,
+                      height: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    description,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 15, 
+                      color: Colors.white70, 
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 24),
-          Text(
-            description,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 16, color: Colors.black54, height: 1.5),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildDot({required int index}) {
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      margin: const EdgeInsets.only(right: 8),
+      duration: const Duration(milliseconds: 300),
+      margin: const EdgeInsets.symmetric(horizontal: 5),
       height: 8,
       width: _currentPage == index ? 24 : 8,
       decoration: BoxDecoration(
-        color: _currentPage == index ? const Color(0xFF003F87) : Colors.grey.shade300,
+        color: _currentPage == index ? Colors.white : Colors.white.withOpacity(0.4),
         borderRadius: BorderRadius.circular(4),
       ),
     );
