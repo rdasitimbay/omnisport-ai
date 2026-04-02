@@ -243,24 +243,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // Surface Color M3
-      appBar: AppBar(
-        title: const Text('Mi Perfil', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8F9FA), // Surface Color M3
+        appBar: AppBar(
+          title: const Text('Mi Perfil', style: TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: true,
+        ),
+        body: _isLoading 
+          ? const Center(child: CircularProgressIndicator()) 
+          : _buildForm(context),
       ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator()) 
-        : _buildForm(),
-      bottomNavigationBar: _buildBottomActions(),
     );
   }
 
-  Widget _buildForm() {
+  Widget _buildForm(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
+      padding: EdgeInsets.only(
+        left: 24.0,
+        right: 24.0,
+        top: 24.0,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24.0,
+      ),
       child: Form(
         key: _formKey,
         child: Column(
@@ -345,6 +352,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: const Text('Eliminar mi cuenta y mis datos', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
               ),
             ),
+            const SizedBox(height: 32),
+            _buildBottomActions(),
             const SizedBox(height: 48),
           ],
         ),
@@ -422,28 +431,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildBottomActions() {
     if (_isLoading) return const SizedBox.shrink();
     
-    return SafeArea(
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))
-          ]
-        ),
-        child: ElevatedButton(
-          onPressed: _isSaving ? null : _saveProfile,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF003F87),
-            disabledBackgroundColor: Colors.grey.shade300,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          ),
-          child: _isSaving 
-            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-            : const Text('GUARDAR CAMBIOS', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-        ),
+    return ElevatedButton(
+      onPressed: _isSaving ? null : _saveProfile,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF003F87),
+        disabledBackgroundColor: Colors.grey.shade300,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
+      child: _isSaving 
+        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+        : const Text('GUARDAR CAMBIOS', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
     );
   }
 
