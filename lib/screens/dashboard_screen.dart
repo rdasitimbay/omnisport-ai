@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -144,7 +145,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: CircleAvatar(
                   backgroundColor: Colors.white24,
-                  backgroundImage: photoBase64 != null ? MemoryImage(DateTime.now().millisecond % 2 == 0 ? const DefaultAssetBundle().load('assets/placeholder.png') as dynamic : const NetworkImage('https://via.placeholder.com/150') as dynamic) : null, // Simplificado para el prompt
+                  backgroundImage: (photoBase64 != null && photoBase64.isNotEmpty) 
+                      ? MemoryImage(base64Decode(photoBase64)) 
+                      : null,
                   child: photoBase64 == null ? const Icon(CupertinoIcons.person_fill, color: Colors.white, size: 35) : null,
                 ),
               ),
@@ -213,7 +216,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: _actionCard(
             "Torneos",
             "Eventos",
-            CupertinoIcons.trophy_fill,
+            Icons.emoji_events,
             const Color(0xFFFFB300), // Naranja para icon
             onTap: () {
               Navigator.push(
@@ -323,39 +326,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildGlassBottomBar(BuildContext context, String athleteId, String nombre, String sport, Map<String, dynamic> athleteData) {
     return Container(
-      padding: const EdgeInsets.only(bottom: 20),
       decoration: const BoxDecoration(
         color: Colors.transparent,
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(0),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: BottomNavigationBar(
-            currentIndex: 0,
-            backgroundColor: Colors.white.withOpacity(0.05),
-            elevation: 0,
-            selectedItemColor: Colors.white,
-            unselectedItemColor: Colors.white38,
-            onTap: (index) {
-              if (index == 0) return;
-              if (index == 1) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => TrainingScreen(athleteId: athleteId, athleteName: nombre, sport: sport)),
-                );
-              } else if (index == 2) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ProfileScreen(athleteId: athleteId, athleteName: nombre, photoBase64: athleteData['photoBase64'])),
-                );
-              }
-            },
-            items: const [
-              BottomNavigationBarItem(icon: Icon(CupertinoIcons.house_fill), label: 'Dashboard'),
-              BottomNavigationBarItem(icon: Icon(CupertinoIcons.bolt_fill), label: 'Rutina'),
-              BottomNavigationBarItem(icon: Icon(CupertinoIcons.person_fill), label: 'Perfil'),
-            ],
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1), width: 0.5)),
+            ),
+            child: BottomNavigationBar(
+              currentIndex: 0,
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              type: BottomNavigationBarType.fixed,
+              selectedItemColor: const Color(0xFF00E5FF), // Activo en Cyan
+              unselectedItemColor: Colors.white38,
+              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              unselectedLabelStyle: const TextStyle(fontSize: 12),
+              onTap: (index) {
+                if (index == 0) return;
+                if (index == 1) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => TrainingScreen(athleteId: athleteId, athleteName: nombre, sport: sport)),
+                  );
+                } else if (index == 2) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => ProfileScreen(athleteId: athleteId, athleteName: nombre, photoBase64: athleteData['photoBase64'])),
+                  );
+                }
+              },
+              items: const [
+                BottomNavigationBarItem(icon: Icon(CupertinoIcons.house_fill), label: 'Dashboard'),
+                BottomNavigationBarItem(icon: Icon(CupertinoIcons.bolt_fill), label: 'Rutina'),
+                BottomNavigationBarItem(icon: Icon(CupertinoIcons.person_fill), label: 'Perfil'),
+              ],
+            ),
           ),
         ),
       ),

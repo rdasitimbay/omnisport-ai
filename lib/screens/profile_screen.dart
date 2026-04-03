@@ -1,4 +1,6 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
@@ -35,7 +37,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
 
-  // Form Controllers
   late TextEditingController _nameController;
   late TextEditingController _phoneController;
   late TextEditingController _clubController;
@@ -145,12 +146,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       lastDate: DateTime.now(),
       builder: (context, child) {
         return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF003F87), 
-              onPrimary: Colors.white,
-              onSurface: Colors.black,
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFF00E5FF), 
+              onPrimary: Colors.black,
+              surface: Color(0xFF001F3F),
+              onSurface: Colors.white,
             ),
+            dialogBackgroundColor: const Color(0xFF001F3F),
           ),
           child: child!,
         );
@@ -164,27 +167,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _showImageSourceActionSheet() async {
     showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.transparent,
       builder: (BuildContext context) {
-        return SafeArea(
-          child: Wrap(
-            children: <Widget>[
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Elegir de Galería'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _pickAndUploadImage(ImageSource.gallery);
-                },
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                border: Border.all(color: Colors.white.withOpacity(0.1)),
               ),
-              ListTile(
-                leading: const Icon(Icons.photo_camera),
-                title: const Text('Tomar Foto'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _pickAndUploadImage(ImageSource.camera);
-                },
+              child: SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white30, borderRadius: BorderRadius.circular(10)), margin: const EdgeInsets.only(bottom: 24)),
+                    ListTile(
+                      leading: const Icon(CupertinoIcons.photo, color: Colors.white),
+                      title: const Text('Elegir de Galería', style: TextStyle(color: Colors.white)),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        _pickAndUploadImage(ImageSource.gallery);
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(CupertinoIcons.camera, color: Colors.white),
+                      title: const Text('Tomar Foto', style: TextStyle(color: Colors.white)),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        _pickAndUploadImage(ImageSource.camera);
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
         );
       },
@@ -246,135 +265,208 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8F9FA), // Surface Color M3
+        extendBodyBehindAppBar: true,
         appBar: AppBar(
-          title: const Text('Mi Perfil', style: TextStyle(fontWeight: FontWeight.bold)),
-          backgroundColor: Colors.white,
+          title: const Text('Mi Perfil', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.5)),
+          backgroundColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+          flexibleSpace: ClipRRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Container(color: Colors.white.withOpacity(0.05)),
+            ),
+          ),
         ),
-        body: _isLoading 
-          ? const Center(child: CircularProgressIndicator()) 
-          : _buildForm(context),
+        body: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF001F3F), Color(0xFF00E5FF)],
+            ),
+          ),
+          child: _isLoading 
+            ? const Center(child: CircularProgressIndicator(color: Colors.white)) 
+            : _buildForm(context),
+        ),
       ),
     );
   }
 
   Widget _buildForm(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.only(
-        left: 24.0,
-        right: 24.0,
-        top: 24.0,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24.0,
-      ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildAvatarSection(),
-            const SizedBox(height: 32),
-            
-            // Sección Datos Personales
-            const Text('Datos Personales', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003F87))),
-            const SizedBox(height: 16),
-            
-            TextFormField(
-              controller: _nameController,
-              decoration: _buildInputDecoration('Nombre Completo', Icons.person_outline),
-              validator: (v) => v!.isEmpty ? 'Ingresa tu nombre' : null,
-            ),
-            const SizedBox(height: 16),
-            
-            TextFormField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: _buildInputDecoration('Teléfono Móvil', Icons.phone_outlined),
-            ),
-            const SizedBox(height: 16),
-            
-            DropdownButtonFormField<String>(
-              value: _selectedGender,
-              decoration: _buildInputDecoration('Género', Icons.wc_outlined),
-              items: ['Male', 'Female', 'Other']
-                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                  .toList(),
-              onChanged: (val) => setState(() => _selectedGender = val),
-            ),
-            const SizedBox(height: 16),
-            
-            InkWell(
-              onTap: () => _selectDate(context),
-              child: InputDecorator(
-                decoration: _buildInputDecoration('Fecha de Nacimiento', Icons.calendar_today_outlined),
-                child: Text(
-                  _selectedDate == null 
-                    ? 'Seleccionar fecha' 
-                    : DateFormat('dd / MM / yyyy').format(_selectedDate!),
-                  style: TextStyle(color: _selectedDate == null ? Colors.grey[600] : Colors.black87),
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildAvatarSection(),
+              const SizedBox(height: 48),
+              
+              _buildSectionHeader('DATOS PERSONALES'),
+              const SizedBox(height: 16),
+              
+              _buildGlassContainer(
+                child: Column(
+                  children: [
+                    _buildGlassTextField(
+                      controller: _nameController,
+                      label: 'Nombre Completo',
+                      icon: CupertinoIcons.person,
+                      validator: (v) => v!.isEmpty ? 'Ingresa tu nombre' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildGlassTextField(
+                      controller: _phoneController,
+                      label: 'Teléfono Móvil',
+                      icon: CupertinoIcons.phone,
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildGlassDropdown(),
+                    const SizedBox(height: 16),
+                    _buildGlassDatePicker(),
+                  ],
                 ),
               ),
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // Sección Datos Deportivos
-            const Text('Logística Deportiva', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF003F87))),
-            const SizedBox(height: 16),
-            
-            TextFormField(
-              controller: _clubController,
-              readOnly: true,
-              decoration: _buildInputDecoration('Club Deportivo', Icons.shield_outlined).copyWith(
-                filled: true,
-                fillColor: Colors.grey[100],
-              ),
-            ),
-            
-            const SizedBox(height: 60),
-            
-            // Compliance & Arco
-            Center(
-              child: TextButton(
-                onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => const TermsScreen()));
-                },
-                child: const Text(
-                  'Ver Políticas de Privacidad y Términos',
-                  style: TextStyle(color: Colors.grey, decoration: TextDecoration.underline),
+              
+              const SizedBox(height: 32),
+              _buildSectionHeader('LOGÍSTICA DEPORTIVA'),
+              const SizedBox(height: 16),
+              
+              _buildGlassContainer(
+                child: _buildGlassTextField(
+                  controller: _clubController,
+                  label: 'Club Deportivo',
+                  icon: CupertinoIcons.shield,
+                  readOnly: true,
                 ),
               ),
-            ),
-            Center(
-              child: TextButton(
-                onPressed: _showDeleteConfirmationDialog,
-                child: const Text('Eliminar mi cuenta y mis datos', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              
+              const SizedBox(height: 48),
+              _buildBottomActions(),
+              const SizedBox(height: 24),
+              
+              Center(
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const TermsScreen()));
+                  },
+                  child: Text(
+                    'Políticas de Privacidad y Términos',
+                    style: TextStyle(color: Colors.white.withOpacity(0.5), decoration: TextDecoration.underline, fontSize: 13),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 32),
-            _buildBottomActions(),
-            const SizedBox(height: 48),
-          ],
+              Center(
+                child: TextButton(
+                  onPressed: _showDeleteConfirmationDialog,
+                  child: Text('Eliminar cuenta y datos', style: TextStyle(color: Colors.red.withOpacity(0.7), fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+              ),
+              const SizedBox(height: 40),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  InputDecoration _buildInputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon, color: const Color(0xFF003F87)),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF00E5FF), letterSpacing: 2),
+    );
+  }
+
+  Widget _buildGlassContainer({required Widget child}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.15)),
+          ),
+          child: child,
+        ),
       ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: Color(0xFF003F87), width: 2),
+    );
+  }
+
+  Widget _buildGlassTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    String? Function(String?)? validator,
+    TextInputType? keyboardType,
+    bool readOnly = false,
+  }) {
+    return TextFormField(
+      controller: controller,
+      readOnly: readOnly,
+      keyboardType: keyboardType,
+      style: const TextStyle(color: Colors.white, fontSize: 15),
+      validator: validator,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
+        prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.8), size: 20),
+        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF00E5FF))),
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+    );
+  }
+
+  Widget _buildGlassDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedGender,
+      dropdownColor: const Color(0xFF001F3F),
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: 'Género',
+        labelStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
+        prefixIcon: Icon(CupertinoIcons.person_2, color: Colors.white.withOpacity(0.8), size: 20),
+        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF00E5FF))),
+      ),
+      items: ['Male', 'Female', 'Other']
+          .map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(color: Colors.white))))
+          .toList(),
+      onChanged: (val) => setState(() => _selectedGender = val),
+    );
+  }
+
+  Widget _buildGlassDatePicker() {
+    return InkWell(
+      onTap: () => _selectDate(context),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Fecha de Nacimiento',
+          labelStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
+          prefixIcon: Icon(CupertinoIcons.calendar, color: Colors.white.withOpacity(0.8), size: 20),
+          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+        ),
+        child: Text(
+          _selectedDate == null 
+            ? 'Seleccionar fecha' 
+            : DateFormat('dd / MM / yyyy').format(_selectedDate!),
+          style: TextStyle(color: _selectedDate == null ? Colors.white38 : Colors.white, fontSize: 15),
+        ),
+      ),
     );
   }
 
@@ -388,15 +480,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             height: 140,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFF003F87), width: 4),
+              border: Border.all(color: Colors.white.withOpacity(0.2), width: 3),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 15, offset: const Offset(0, 8)),
+                BoxShadow(color: const Color(0xFF00E5FF).withOpacity(0.2), blurRadius: 20, spreadRadius: 2),
               ],
             ),
             child: CircleAvatar(
               radius: 68,
-              backgroundColor: const Color(0xFF003F87), 
-              backgroundImage: _currentPhotoBase64.isNotEmpty
+              backgroundColor: Colors.white12,
+              backgroundImage: (_currentPhotoBase64.isNotEmpty && _currentPhotoBase64.length > 50)
                   ? MemoryImage(base64Decode(_currentPhotoBase64))
                   : null,
               child: _currentPhotoBase64.isEmpty
@@ -418,8 +510,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onTap: _isUploading ? null : _showImageSourceActionSheet,
               child: Container(
                 padding: const EdgeInsets.all(10),
-                decoration: const BoxDecoration(color: Color(0xFF003F87), shape: BoxShape.circle),
-                child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                decoration: const BoxDecoration(color: Color(0xFF00E5FF), shape: BoxShape.circle),
+                child: const Icon(CupertinoIcons.camera_fill, color: Colors.black87, size: 20),
               ),
             ),
           ),
@@ -429,19 +521,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildBottomActions() {
-    if (_isLoading) return const SizedBox.shrink();
-    
-    return ElevatedButton(
-      onPressed: _isSaving ? null : _saveProfile,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF003F87),
-        disabledBackgroundColor: Colors.grey.shade300,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    return Container(
+      width: double.infinity,
+      height: 60,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF00E5FF), Color(0xFF00BFA5)],
+        ),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF00E5FF).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8)),
+        ],
       ),
-      child: _isSaving 
-        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-        : const Text('GUARDAR CAMBIOS', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: _isSaving ? null : _saveProfile,
+          child: Center(
+            child: _isSaving 
+              ? const CircularProgressIndicator(color: Colors.black87)
+              : const Text('GUARDAR CAMBIOS', style: TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+          ),
+        ),
+      ),
     );
   }
 
@@ -449,40 +552,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('¿Estás seguro?', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-          content: const Text('Esta acción borrará permanentemente tu perfil, fotos y rutinas de entrenamiento.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-            ElevatedButton(
-              onPressed: () async {
-                try {
-                  final user = FirebaseAuth.instance.currentUser;
-                  if (user != null) {
-                    await _firestoreService.deleteAthleteData(user.uid);
-                    try {
-                      await GoogleSignIn().signOut();
-                      await GoogleSignIn().disconnect();
-                    } catch (_) {}
-                    await user.delete();
-                    await FirebaseAuth.instance.signOut();
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+          child: AlertDialog(
+            backgroundColor: const Color(0xFF001F3F),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: Colors.red.withOpacity(0.3))),
+            title: const Text('¿Estás seguro?', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+            content: const Text('Esta acción borrará permanentemente tu perfil, fotos y rutinas.', style: TextStyle(color: Colors.white70)),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar', style: TextStyle(color: Colors.white60))),
+              ElevatedButton(
+                onPressed: () async {
+                  try {
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user != null) {
+                      await _firestoreService.deleteAthleteData(user.uid);
+                      try {
+                        await GoogleSignIn().signOut();
+                        await GoogleSignIn().disconnect();
+                      } catch (_) {}
+                      await user.delete();
+                      await FirebaseAuth.instance.signOut();
+                    }
+                    if (context.mounted) {
+                      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error al eliminar: $e'), backgroundColor: Colors.red),
+                      );
+                    }
                   }
-                  if (context.mounted) {
-                    Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginScreen()), (route) => false);
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error al eliminar: $e. Reautentícate si es necesario.'), backgroundColor: Colors.red),
-                    );
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-              child: const Text('Eliminar'),
-            ),
-          ],
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.withOpacity(0.8), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                child: const Text('Eliminar'),
+              ),
+            ],
+          ),
         );
       }
     );

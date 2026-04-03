@@ -1,4 +1,6 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import '../services/ai_service.dart';
 import '../services/firestore_service.dart';
 
@@ -70,38 +72,47 @@ class _TrainingScreenState extends State<TrainingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _routineFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return _buildLoadingState();
-          } else if (snapshot.hasError) {
-            return _buildErrorState(snapshot.error.toString());
-          } else if (snapshot.hasData) {
-            final List exercises = snapshot.data!['exercises'] ?? [];
-            _completedExercises ??= List.filled(exercises.length, false);
-            return _buildMainContent(exercises);
-          } else {
-            return const Center(child: Text('No hay datos disponibles.'));
-          }
-        },
+      extendBodyBehindAppBar: true,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF001F3F), Color(0xFF00E5FF)],
+          ),
+        ),
+        child: FutureBuilder<Map<String, dynamic>>(
+          future: _routineFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return _buildLoadingState();
+            } else if (snapshot.hasError) {
+              return _buildErrorState(snapshot.error.toString());
+            } else if (snapshot.hasData) {
+              final List exercises = snapshot.data!['exercises'] ?? [];
+              _completedExercises ??= List.filled(exercises.length, false);
+              return _buildMainContent(exercises);
+            } else {
+              return const Center(child: Text('No hay datos disponibles.', style: TextStyle(color: Colors.white)));
+            }
+          },
+        ),
       ),
     );
   }
 
   Widget _buildLoadingState() {
-    return Container(
-      width: double.infinity,
-      color: const Color(0xFF003F87),
-      child: const Column(
+    return Center(
+      child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
-          SizedBox(height: 24),
+          const CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+          const SizedBox(height: 24),
           Text(
-            'Preparando Circuito...',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            'Generando Rutina IA...',
+            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.2),
           ),
         ],
       ),
@@ -113,15 +124,15 @@ class _TrainingScreenState extends State<TrainingScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.error_outline, size: 48, color: Colors.red),
+          const Icon(Icons.error_outline, size: 48, color: Colors.white70),
           const SizedBox(height: 16),
-          Text('Error: $error'),
+          Text('Error: $error', style: const TextStyle(color: Colors.white70)),
           TextButton(
             onPressed: () => setState(() {
               _routineFuture = _aiService.generateTrainingRoutine(widget.athleteName, widget.sport);
               _completedExercises = null;
             }),
-            child: const Text('Reintentar'),
+            child: const Text('Reintentar', style: TextStyle(color: Color(0xFF00E5FF))),
           )
         ],
       ),
@@ -142,18 +153,25 @@ class _TrainingScreenState extends State<TrainingScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Rutina del Día',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      'Tu Rutina del Día',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
-                    Text(
-                      '${_completedExercises!.where((e) => e).length}/${exercises.length}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${_completedExercises!.where((e) => e).length}/${exercises.length}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF00E5FF)),
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text('Marca cada ejercicio al terminarlo para finalizar.', 
-                     style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                const SizedBox(height: 8),
+                Text('Marca cada ejercicio al finalizar para completar la sesión.', 
+                     style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14)),
               ],
             ),
           ),
@@ -173,7 +191,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
             child: _buildFinishButton(exercises),
           ),
         ),
-        const SliverToBoxAdapter(child: SizedBox(height: 40)),
+        const SliverToBoxAdapter(child: SizedBox(height: 60)),
       ],
     );
   }
@@ -183,11 +201,24 @@ class _TrainingScreenState extends State<TrainingScreen> {
       expandedHeight: 120.0,
       pinned: true,
       elevation: 0,
-      backgroundColor: const Color(0xFF003F87),
-      flexibleSpace: FlexibleSpaceBar(
-        title: Text('${widget.athleteName} - ${widget.sport}', 
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        centerTitle: true,
+      stretch: true,
+      backgroundColor: Colors.transparent,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+        onPressed: () => Navigator.pop(context),
+      ),
+      flexibleSpace: ClipRRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: FlexibleSpaceBar(
+            title: Text('${widget.sport} Intensity', 
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.5)),
+            centerTitle: true,
+            background: Container(
+              color: Colors.white.withOpacity(0.05),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -195,54 +226,60 @@ class _TrainingScreenState extends State<TrainingScreen> {
   Widget _buildExerciseCard(dynamic exercise, int index) {
     bool isDone = _completedExercises![index];
     
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 300),
-      opacity: isDone ? 0.6 : 1.0,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
-          ],
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(24),
-          onTap: () => setState(() => _completedExercises![index] = !isDone),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        exercise['name'] ?? 'Ejercicio',
-                        style: TextStyle(
-                          fontSize: 18, 
-                          fontWeight: FontWeight.bold,
-                          decoration: isDone ? TextDecoration.lineThrough : null,
-                          color: isDone ? Colors.grey : Colors.black87,
-                        ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            decoration: BoxDecoration(
+              color: isDone ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: isDone ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.2),
+                width: 1,
+              ),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: () => setState(() => _completedExercises![index] = !isDone),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            exercise['name'] ?? 'Ejercicio',
+                            style: TextStyle(
+                              fontSize: 18, 
+                              fontWeight: FontWeight.bold,
+                              decoration: isDone ? TextDecoration.lineThrough : null,
+                              color: isDone ? Colors.white38 : Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Semanas: ${exercise['reps']}',
+                            style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            exercise['desc'] ?? '',
+                            style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.6), height: 1.4),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Reps: ${exercise['reps']}',
-                        style: const TextStyle(color: Color(0xFF003F87), fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        exercise['desc'] ?? '',
-                        style: const TextStyle(fontSize: 14, color: Colors.black54, height: 1.4),
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 12),
+                    _buildCheckButton(index, isDone),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                _buildCheckButton(index, isDone),
-              ],
+              ),
             ),
           ),
         ),
@@ -252,17 +289,20 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
   Widget _buildCheckButton(int index, bool isDone) {
     return Container(
-      width: 32,
-      height: 32,
+      width: 36,
+      height: 36,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isDone ? Colors.green : Colors.grey.withOpacity(0.1),
-        border: Border.all(color: isDone ? Colors.green : Colors.grey.withOpacity(0.3)),
+        color: isDone ? const Color(0xFF00E5FF) : Colors.white.withOpacity(0.10),
+        border: Border.all(color: isDone ? const Color(0xFF00E5FF) : Colors.white.withOpacity(0.3), width: 1.5),
+        boxShadow: isDone ? [
+          BoxShadow(color: const Color(0xFF00E5FF).withOpacity(0.3), blurRadius: 8, spreadRadius: 1),
+        ] : [],
       ),
       child: Icon(
         Icons.check, 
-        size: 18, 
-        color: isDone ? Colors.white : Colors.transparent
+        size: 20, 
+        color: isDone ? Colors.black87 : Colors.transparent
       ),
     );
   }
@@ -274,31 +314,31 @@ class _TrainingScreenState extends State<TrainingScreen> {
       width: double.infinity,
       height: 60,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         gradient: LinearGradient(
           colors: ready 
-            ? [const Color(0xFF00B09B), const Color(0xFF96C93D)] // Green gradient
-            : [const Color(0xFFBDC3C7), const Color(0xFF2C3E50)], // Grey/Inactive gradient
+            ? [const Color(0xFF00E5FF), const Color(0xFF00BFA5)] // Cyan gradient
+            : [Colors.white.withOpacity(0.1), Colors.white.withOpacity(0.05)], // Glassy inactive
         ),
         boxShadow: ready ? [
-          BoxShadow(color: Colors.green.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 6)),
+          BoxShadow(color: const Color(0xFF00E5FF).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 6)),
         ] : [],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
           onTap: ready && !_isSaving ? () => _handleFinishSession(exercises) : null,
           child: Center(
             child: _isSaving 
               ? const CircularProgressIndicator(color: Colors.white)
               : Text(
-                  'FINALIZAR SESIÓN',
+                   ready ? 'FINALIZAR ENTRENAMIENTO' : 'COMPLETA TODOS LOS EJERCICIOS',
                   style: TextStyle(
-                    color: ready ? Colors.white : Colors.white60, 
+                    color: ready ? Colors.black87 : Colors.white38, 
                     fontWeight: FontWeight.bold, 
-                    fontSize: 16, 
-                    letterSpacing: 1.2
+                    fontSize: 14, 
+                    letterSpacing: 1.5
                   ),
                 ),
           ),
