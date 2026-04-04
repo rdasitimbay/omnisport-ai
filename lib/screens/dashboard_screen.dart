@@ -55,6 +55,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final String sport = athleteData['sport'] ?? athleteData['disciplina'] ?? 'Sin disciplina';
 
         return Scaffold(
+          extendBody: true,
           extendBodyBehindAppBar: true,
           appBar: AppBar(
             title: const Text(
@@ -331,21 +332,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       child: ClipRRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20), // Aumentamos un poco el blur
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
-              border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1), width: 0.5)),
+              color: Colors.white.withOpacity(0.03), // Menos opacidad para el 'cristal'
+              border: Border(top: BorderSide(color: Colors.white.withOpacity(0.2), width: 0.5)),
             ),
             child: BottomNavigationBar(
               currentIndex: 0,
-              backgroundColor: Colors.transparent,
+              backgroundColor: Colors.transparent, // Transparencia absoluta
               elevation: 0,
               type: BottomNavigationBarType.fixed,
-              selectedItemColor: const Color(0xFF00E5FF), // Activo en Cyan
-              unselectedItemColor: Colors.white38,
+              iconSize: 28, // Mayor presencia visual en el cristal
+              selectedItemColor: const Color(0xFF00E5FF), // Cian Eléctrico
+              unselectedItemColor: Colors.white.withOpacity(0.6), // Ajuste a 0.6 para no verse apagados
               selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-              unselectedLabelStyle: const TextStyle(fontSize: 12),
+              unselectedLabelStyle: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.6)),
               onTap: (index) {
                 if (index == 0) return;
                 if (index == 1) {
@@ -361,9 +363,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 }
               },
               items: const [
-                BottomNavigationBarItem(icon: Icon(CupertinoIcons.house_fill), label: 'Dashboard'),
-                BottomNavigationBarItem(icon: Icon(CupertinoIcons.bolt_fill), label: 'Rutina'),
-                BottomNavigationBarItem(icon: Icon(CupertinoIcons.person_fill), label: 'Perfil'),
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.house), 
+                  activeIcon: Icon(CupertinoIcons.house_fill, shadows: [Shadow(color: Color(0xFF00E5FF), blurRadius: 12)]),
+                  label: 'Dashboard',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.bolt), 
+                  activeIcon: Icon(CupertinoIcons.bolt_fill, shadows: [Shadow(color: Color(0xFF00E5FF), blurRadius: 12)]),
+                  label: 'Rutina',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(CupertinoIcons.person), 
+                  activeIcon: Icon(CupertinoIcons.person_fill, shadows: [Shadow(color: Color(0xFF00E5FF), blurRadius: 12)]),
+                  label: 'Perfil',
+                ),
               ],
             ),
           ),

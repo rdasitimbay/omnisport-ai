@@ -39,5 +39,21 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    
+    target.build_configurations.each do |config|
+      # 1. Igualar Deployment Target al del proyecto principal (Crítico para C++ en M4)
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.6'
+      
+      # 2. Forzar C++17 y la librería estándar correcta
+      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+      
+      # 3. Apagar las validaciones estrictas de Apple para frameworks de Google
+      config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
+      config.build_settings['CLANG_ENABLE_MODULE_DEBUGGING'] = 'NO'
+      
+      # 4. Solución específica para errores de Firebase/gRPC
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)', 'HAVE_PTHREAD=1']
+    end
   end
 end

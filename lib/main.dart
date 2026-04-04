@@ -82,6 +82,11 @@ class OmniSportApp extends StatelessWidget {
             colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF003F87)),
             useMaterial3: true,
             fontFamily: 'Inter',
+            canvasColor: Colors.transparent, // Permite que el fondo de cristal brille
+            bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+            ),
           ),
           home: const SplashScreen(),
         );
