@@ -1,94 +1,75 @@
-# 🏐 OmniSport-AI: El Mega ERP del Deporte Inteligente
+# 🏐 OmniSport-AI: Mega ERP de Gestión Deportiva Inteligente
 
+![Build](https://img.shields.io/badge/Build-20.1_Antigravity-orange?style=for-the-badge)
+![Security](https://img.shields.io/badge/DPO_Shield-Zero_Trust_Active-red?style=for-the-badge)
+![UI](https://img.shields.io/badge/UI-Diamond_Glass_🍏-blue?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Sprint-1_Completado-green?style=for-the-badge)
-![Flutter](https://img.shields.io/badge/Flutter-v3.x-02569B?style=for-the-badge&logo=flutter)
-![License](https://img.shields.io/badge/Security-DPO_Shield_Active-blue?style=for-the-badge)
 
-**OmniSport-AI** es una plataforma integral de gestión deportiva que fusiona una estética de vanguardia (**Diamond Glass UI**) con un motor de seguridad de grado bancario (**DPO Shield**). Diseñado para coordinadores y clubes que no comprometen la seguridad ni la experiencia del usuario.
+**OmniSport-AI** es una plataforma de gestión deportiva de alto rendimiento que fusiona la ingeniería de software avanzada con la auditoría de sistemas tecnológicos. Este Mega ERP está diseñado para ofrecer seguridad inquebrantable y una experiencia de usuario de élite.
 
 ---
 
-## 💎 Pilares del Proyecto
+## 🏗️ Infraestructura y Optimización "Zero-Detritus"
 
-### 1. Zero Trust Scanner (DPO Shield) 🛡️
-Implementación de acceso mediante QRs dinámicos con rotación de **30 segundos**. 
-* **Validación en tiempo real:** Handshake seguro para prevenir capturas de pantalla o fraude.
-* **Cumplimiento LOPDP:** Arquitectura diseñada bajo estándares de Protección de Datos Personales (Ecuador).
+Para garantizar la estabilidad en el desarrollo bajo **macOS (M4)**, se implementó una arquitectura de archivos blindada contra interferencias de procesos en la nube:
 
-### 2. Diamond Glass UI 🍏
-Interfaz de usuario de alta fidelidad que utiliza efectos de desenfoque gaussiano, gradientes dinámicos y jerarquía visual de élite, optimizada para el rendimiento del procesador **M4**.
-
-### 3. Opal AI Integration (Próximamente) 🤖
-Asistente inteligente para la automatización de notificaciones a representantes y telemetría de flujo en eventos deportivos.
+* **Ruta de Desarrollo Local:** Migración crítica desde OneDrive a una zona protegida: `~/Documents/ANTIGRAVITY/omnisport-ai.nosync/`.
+* **Aislamiento Cloud:** El uso del sufijo `.nosync` impide que iCloud/OneDrive generen metadatos corruptos durante la compilación.
+* **Saneamiento de Atributos:** Limpieza sistemática de *resource forks* y *Finder information* mediante `xattr -cr .`, permitiendo un **Code Signing** exitoso para producción.
+* **Parche de Compilación Xcode:** Optimización del `Podfile` para suprimir advertencias de cabeceras en frameworks internos (`Nanopb`, `Firebase`, `leveldb`) mediante la flag `CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER`.
 
 ---
 
-## 🛠️ Especificaciones Técnicas
+## 🛡️ DPO Shield: El Pilar de Seguridad Zero Trust
 
-* **Framework:** Flutter (Multiplataforma iOS/Android).
-* **Backend:** Firebase (Firestore, Auth, Cloud Functions).
-* **Seguridad:** JWT (JSON Web Tokens) para validación offline/online.
-* **Arquitectura:** Clean Architecture con gestión de estado optimizada.
+El sistema de acceso implementa un protocolo de seguridad diseñado bajo la normativa de **Protección de Datos Personales (LOPDP)**:
 
----
+### 1. Validación de Acceso Dinámico
+* **Tokens de Rotación:** QRs con validez de **30 segundos** generados mediante JWT para mitigar ataques de replay y capturas de pantalla.
+* **Handshake Seguro:** Validación asíncrona que distingue entre accesos **APTOS**, **EXPIRADOS** e **ILEGIBLES/FALSOS**.
 
-## 🚀 Logros del Sprint 1 (Hitos Alcanzados)
-
-- [x] **Estabilización de Entorno:** Migración exitosa de entornos cloud (OneDrive) a rutas locales protegidas (`.nosync`) para optimización de compilación.
-- [x] **Code Signing:** Firma de código validada para producción en iOS y Android.
-- [x] **Unit Testing:** Cobertura del 100% en lógica de validación de acceso (4/4 tests passed).
-- [x] **Despliegue:** Binarios generados con éxito para **TestFlight** y **APK Release**.
+### 2. Resiliencia Multiplataforma (Android Fix)
+* **Thread Recovery:** Implementación de lógica de autorecuperación en el método `_resetScanner()`.
+* **Reseteo de Hilos:** Uso de `_scannerController.start()` con manejo de excepciones para evitar el congelamiento de la cámara en dispositivos Android tras detecciones exitosas.
 
 ---
 
-## 🔧 Guía de Instalación para Desarrolladores
+## 🍏 Diamond Glass UI: Experiencia de Vanguardia
 
-Para mantener la integridad de la firma de código en macOS, se recomienda trabajar en una ruta local fuera de sincronización cloud:
-
-1.  **Clonar el repositorio:**
-    ```bash
-    git clone [https://github.com/rdasitimbay/omnisport-ai.git](https://github.com/rdasitimbay/omnisport-ai.git)
-    ```
-2.  **Limpiar atributos de sistema (Fix para Xcode CodeSign):**
-    ```bash
-    xattr -cr .
-    ```
-3.  **Obtener dependencias:**
-    ```bash
-    flutter pub get
-    ```
-4.  **Ejecutar pruebas unitarias:**
-    ```bash
-    flutter test test/validator_test.dart
-    ```
+Interfaz de usuario inspirada en el diseño moderno de Apple, optimizada para pantallas de alta densidad:
+* **Efectos de Cristal:** Uso de `BackdropFilter` con desenfoque gaussiano y gradientes dinámicos.
+* **Feedback en Tiempo Real:** Paneles de estado translúcidos que informan la telemetría del escaneo sin interrumpir la visión de la cámara.
 
 ---
 
-## 📈 Roadmap de Ingeniería
+## 🧪 Control de Calidad y Auditoría
 
-* **Sprint 2:** Integración real de base de datos de atletas y perfiles biométricos.
-* **Sprint 3:** Módulo de pagos y pasarela de suscripciones para torneos.
-* **Sprint 4:** Dashboard de telemetría para coordinación de complejos deportivos.
+Resultados oficiales de la suite de pruebas unitarias y de integración (vía `test/validator_test.dart`):
+
+| Test ID | Caso de Prueba | Resultado |
+| :--- | :--- | :--- |
+| **TC-01** | Validar QR vigente y autenticado (DPO Shield) | ✅ PASSED |
+| **TC-02** | Bloquear ingreso con QR expirado (>30s) | ✅ PASSED |
+| **TC-03** | Detectar y alertar sobre QRs ilegibles o falsos | ✅ PASSED |
+| **TC-04** | Validar reset de cámara y recuperación de UI en Android | ✅ PASSED |
 
 ---
 
-> **Nota del Autor:** Este proyecto es desarrollado bajo la coordinación de **Rommel Asitimbay Morales**, combinando ingeniería de software con auditoría de sistemas tecnológicos. 🦾🏐
+## 🚀 Despliegue Actual
 
+* **iOS:** Distribuido vía **TestFlight** para pruebas de usuario final.
+* **Android:** Generación de **APK Release** optimizada para distribución directa.
+* **Repo:** Historial de commits saneado y respaldado en GitHub.
 
-# app
+---
 
-A new Flutter project.
+## 📅 Roadmap de Próximas Épicas
 
-## Getting Started
+- [ ] **Sprint 2:** Integración real con **Firebase Firestore** para gestión biográfica de atletas.
+- [ ] **Sprint 3:** Implementación del motor de notificaciones **Opal AI** para representantes.
+- [ ] **Sprint 4:** Dashboard de telemetría y auditoría de flujos para coordinación.
 
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+---
+**Director de Proyecto:** Rommel Asitimbay Morales  
+**Ingeniería de Desarrollo:** Antigravity AI Engine  
+**Hardware de Referencia:** MacBook Air M4 (Local Optimized) 🚀
