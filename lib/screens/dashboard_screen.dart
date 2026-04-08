@@ -7,6 +7,8 @@ import '../services/firestore_service.dart';
 import 'training_screen.dart';
 import 'profile_screen.dart';
 import 'tablas_screen.dart';
+import 'qr_generator_screen.dart';
+import 'qr_scanner_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -102,6 +104,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       _buildQuickActions(athleteDoc.id, nombre, sport),
                       const SizedBox(height: 24),
                       const Text(
+                        "Staff Tools (Demo)",
+                        style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 18),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildStaffActions(),
+                      const SizedBox(height: 24),
+                      const Text(
                         "Rendimiento",
                         style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 18),
                       ),
@@ -194,7 +203,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         Expanded(
           child: _actionCard(
-            "Entrenamiento",
+            "Entreno",
             "Sesión IA",
             CupertinoIcons.play_circle_fill,
             const Color(0xFF00E5FF), // Cyan para icon
@@ -212,7 +221,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
             },
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _actionCard(
+            "Acceso",
+            "Pase QR",
+            CupertinoIcons.qrcode,
+            Colors.purpleAccent,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const QrGeneratorScreen()),
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
         Expanded(
           child: _actionCard(
             "Torneos",
@@ -226,6 +250,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
               );
             },
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStaffActions() {
+    return Row(
+      children: [
+        Expanded(
+          child: _actionCard(
+            "Zero Trust",
+            "Escáner Staff",
+            CupertinoIcons.barcode_viewfinder,
+            Colors.greenAccent,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const QrScannerScreen()),
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Container(), // Spacer to visually un-stretch if needed, or add future tools
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Container(),
         ),
       ],
     );
