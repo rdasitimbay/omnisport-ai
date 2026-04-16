@@ -55,6 +55,14 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
     final String? rawValue = barcodes.first.rawValue;
     if (rawValue != null) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Detectado: ${rawValue.trim()}', style: const TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.blueAccent,
+          duration: const Duration(seconds: 4),
+        ),
+      );
       _processQR(rawValue.trim());
     }
   }
@@ -91,9 +99,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       await Future.delayed(const Duration(milliseconds: 600)); // Efecto dramático de red para ver el Skeleton
 
       try {
-        final doc = await FirebaseFirestore.instance.collection('usuarios').doc(uid).get();
+        final doc = await FirebaseFirestore.instance.collection('athletes').doc(uid).get();
         if (!doc.exists) {
-          _setInvalid("Usuario no encontrado en BD");
+          _setInvalid("Usuario ($uid) no encontrado en BD");
           return;
         }
 
@@ -122,7 +130,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         }
       } catch (e) {
         print("ERROR EN FIRESTORE: $e");
-        _setInvalid("Error DB/Permisos: Ver Consola");
+        _setInvalid("Data Error: $e");
       }
     } else if (_currentState == ScanState.waitingGuardian) {
       // Asumimos que el 2do QR es del tutor autorizando.
@@ -371,7 +379,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     }
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('usuarios').doc(_scannedUid).snapshots(),
+      stream: FirebaseFirestore.instance.collection('athletes').doc(_scannedUid).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           print("ERROR EN STREAM: ${snapshot.error}");
@@ -386,22 +394,26 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         // Lógica de Semáforo Diamond Glass (basado en status)
         Color finalNeonColor = baseNeonColor;
         String displayStatus = "INGRESO APTO";
-        String upperStatus = model.status.toUpperCase();
         
-        if (upperStatus.contains('ACCESO AUTORIZADO') || upperStatus.contains('AL DÍA')) {
+        // Removemos acentos comunes para la sanitización y evitamos fallos de string
+        String lowerStatus = model.status.trim().toLowerCase()
+          .replaceAll('á', 'a').replaceAll('é', 'e')
+          .replaceAll('í', 'i').replaceAll('ó', 'o').replaceAll('ú', 'u');
+        
+        if (lowerStatus.contains('acceso autorizado') || lowerStatus.contains('al dia')) {
           finalNeonColor = const Color(0xFF50C878); // Verde Esmeralda
-          displayStatus = "ACCESO AUTORIZADO";
-        } else if (upperStatus.contains('PAGO PENDIENTE')) {
+          displayStatus = "ACCESO AUTORIZADO / AL DÍA";
+        } else if (lowerStatus.contains('pago pendiente')) {
           finalNeonColor = const Color(0xFFFFBF00); // Naranja Ámbar
           displayStatus = "PAGO PENDIENTE";
-        } else if (upperStatus.contains('VENCIDA') || upperStatus.contains('DENEGADO')) {
+        } else if (lowerStatus.contains('vencida') || lowerStatus.contains('vencido') || lowerStatus.contains('denegado')) {
           finalNeonColor = const Color(0xFFDC143C); // Rojo Carmesí
           displayStatus = "ACCESO DENEGADO";
-        } else if (upperStatus.contains('INACTIVO')) {
+        } else if (lowerStatus.contains('inactivo')) {
           finalNeonColor = const Color(0xFFB0BEC5); // Gris Frost
           displayStatus = "ATLETA INACTIVO";
         } else {
-          displayStatus = model.status.toUpperCase();
+          displayStatus = model.status.trim().toUpperCase();
         }
 
         return Column(
