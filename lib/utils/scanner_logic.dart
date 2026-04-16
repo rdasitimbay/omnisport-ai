@@ -13,11 +13,12 @@ class ScannerLogic {
   static const String jwtSecret = 'omnisport_secret_2026';
 
   static ValidationResult validar(String jwtToken) {
-    print('UID Detectado: ' + jwtToken); // Modo Debug
+    final token = jwtToken.trim();
+    print('Scanned Token Trimmed: ' + token);
     
-    // Bypass temporal para IDs planos de Firebase (28 caracteres)
-    if (jwtToken.trim().length == 28) {
-      return ValidationResult(ScanStatus.apto, uid: jwtToken.trim());
+    // Bypass agnóstico: si no tiene formato JWT (3 partes con puntos), asumimos que es un UID plano
+    if (!token.contains('.') || token.split('.').length != 3) {
+      return ValidationResult(ScanStatus.apto, uid: token);
     }
 
     try {

@@ -55,7 +55,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
     final String? rawValue = barcodes.first.rawValue;
     if (rawValue != null) {
-      _processQR(rawValue);
+      _processQR(rawValue.trim());
     }
   }
 
@@ -91,9 +91,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       await Future.delayed(const Duration(milliseconds: 600)); // Efecto dramático de red para ver el Skeleton
 
       try {
-        final doc = await FirebaseFirestore.instance.collection('athletes').doc(uid).get();
+        final doc = await FirebaseFirestore.instance.collection('usuarios').doc(uid).get();
         if (!doc.exists) {
-          _setInvalid("Usuario no encontrado en base de datos");
+          _setInvalid("Usuario no encontrado en BD");
           return;
         }
 
@@ -121,7 +121,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           _setSuccess("Ingreso Apto");
         }
       } catch (e) {
-        _setInvalid("Código QR Ilegible o Falso");
+        print("ERROR EN FIRESTORE: $e");
+        _setInvalid("Error DB/Permisos: Ver Consola");
       }
     } else if (_currentState == ScanState.waitingGuardian) {
       // Asumimos que el 2do QR es del tutor autorizando.
@@ -370,8 +371,12 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     }
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('athletes').doc(_scannedUid).snapshots(),
+      stream: FirebaseFirestore.instance.collection('usuarios').doc(_scannedUid).snapshots(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          print("ERROR EN STREAM: ${snapshot.error}");
+          return _buildSkeletonLoader(baseNeonColor);
+        }
         if (!snapshot.hasData || !snapshot.data!.exists) {
           return _buildSkeletonLoader(baseNeonColor);
         }
