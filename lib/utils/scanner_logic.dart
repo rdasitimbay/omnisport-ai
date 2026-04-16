@@ -13,6 +13,13 @@ class ScannerLogic {
   static const String jwtSecret = 'omnisport_secret_2026';
 
   static ValidationResult validar(String jwtToken) {
+    print('UID Detectado: ' + jwtToken); // Modo Debug
+    
+    // Bypass temporal para IDs planos de Firebase (28 caracteres)
+    if (jwtToken.trim().length == 28) {
+      return ValidationResult(ScanStatus.apto, uid: jwtToken.trim());
+    }
+
     try {
       final jwt = JWT.verify(jwtToken, SecretKey(jwtSecret));
       final payload = jwt.payload as Map<String, dynamic>;

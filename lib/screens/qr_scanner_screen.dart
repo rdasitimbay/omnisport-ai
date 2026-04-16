@@ -5,9 +5,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:app/utils/scanner_logic.dart';
+import 'package:app/models/athlete.dart'; // Importante: importar el modelo
 
-enum ScanState { scanningAthlete, success, waitingGuardian, scanningGuardian, invalid }
+enum ScanState { scanningAthlete, loadingAthlete, success, waitingGuardian, scanningGuardian, invalid }
 
 class QrScannerScreen extends StatefulWidget {
   const QrScannerScreen({Key? key}) : super(key: key);
@@ -18,7 +20,7 @@ class QrScannerScreen extends StatefulWidget {
 
 class _QrScannerScreenState extends State<QrScannerScreen> {
   final MobileScannerController _scannerController = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates,
+    detectionSpeed: DetectionSpeed.normal, // Cambiado para evitar bloqueo en Android
   );
   
   // Caché de simulacion offline (TKT-004)
@@ -31,6 +33,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   Map<String, dynamic>? _athleteData;
   String _message = 'Escanea el pase del Atleta';
   bool _isProcessing = false;
+  DateTime? _lastScanTime; // Para Debounce manual
 
   @override
   void dispose() {
@@ -40,6 +43,12 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
   void _onDetect(BarcodeCapture capture) async {
     if (_isProcessing) return;
+
+    // Filtro Debounce (2 segundos) para no bloquear la lectura del mismo código
+    if (_lastScanTime != null && DateTime.now().difference(_lastScanTime!).inSeconds < 2) {
+      return;
+    }
+    _lastScanTime = DateTime.now();
     
     final List<Barcode> barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
@@ -72,6 +81,15 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     final String uid = validacion.uid!;
 
     if (_currentState == ScanState.scanningAthlete) {
+      if (mounted) {
+        setState(() {
+          _scannedUid = uid;
+          _currentState = ScanState.loadingAthlete;
+        });
+      }
+
+      await Future.delayed(const Duration(milliseconds: 600)); // Efecto dramático de red para ver el Skeleton
+
       try {
         final doc = await FirebaseFirestore.instance.collection('athletes').doc(uid).get();
         if (!doc.exists) {
@@ -81,20 +99,25 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
         final data = doc.data()!;
         final bool isMinor = _checkIfMinor(data);
+        // Aunque tenemos data aquí, UI usará un StreamBuilder para pintar el modelo Athlete
         
-        setState(() {
-          _athleteData = data;
-          _scannedUid = uid;
-        });
+        if (mounted) {
+          setState(() {
+            _athleteData = data;
+          });
+        }
 
         if (isMinor) {
-          setState(() {
-            _currentState = ScanState.waitingGuardian;
-            _message = 'Atleta Menor de Edad.\nEscanea Pase del Tutor.';
-            _isProcessing = false; // Permitir escanear 2do código
-          });
+          if (mounted) {
+            setState(() {
+              _currentState = ScanState.waitingGuardian;
+              _message = 'Atleta Menor de Edad.\nEscanea Pase del Tutor.';
+              _isProcessing = false; // Permitir escanear 2do código
+            });
+          }
         } else {
           _logAccess(uid, "athlete_solo");
+          _simulateOpalAINotification(uid, data['fullName'] ?? 'Atleta'); // Opal AI Simulated Local Push
           _setSuccess("Ingreso Apto");
         }
       } catch (e) {
@@ -132,6 +155,15 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       'synced': false // flag offline (preparación para TKT-004)
     };
     print("LOG OFFLINE SAVED: ${_offlineLogsMap['$uid-$timestamp']}");
+  }
+
+  void _simulateOpalAINotification(String uid, String name) {
+    // Fase 1: Simulación Local (Spark Plan Cost Zero)
+    final time = DateTime.now().toString().substring(11, 16);
+    debugPrint("------------------------------------------");
+    debugPrint("🔔 OPAL AI PUSH NOTIFICATION (Simulada)");
+    debugPrint("Mensaje: Opal AI informa: $name ha ingresado al complejo a las $time");
+    debugPrint("------------------------------------------");
   }
 
   void _setSuccess(String msg) {
@@ -249,6 +281,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       case ScanState.scanningAthlete:
       case ScanState.scanningGuardian:
         return const Color(0xFF00E5FF); // Cyan
+      case ScanState.loadingAthlete:
+        return Colors.white54; // Placeholder
       case ScanState.success:
         return Colors.greenAccent; // Success Verde Neon
       case ScanState.waitingGuardian:
@@ -260,79 +294,170 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
   Widget _buildDiamondModal() {
     final neonColor = _getNeonColor();
-    final String photoBase64 = _athleteData?['photoBase64'] ?? '';
-    final String nombreCompleto = _athleteData?['nombre_completo'] ?? _athleteData?['full_name'] ?? 'Desconocido';
-    // Ofuscado: Solo mostramos nombre de pila (o los primeros dos si es compuesto, pero con split().first aseguramos no apellidos)
-    final String nombrePila = nombreCompleto.split(' ').first;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(32),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(32),
-            border: Border.all(color: neonColor.withOpacity(0.6), width: 1.5),
-            boxShadow: [
-               BoxShadow(color: neonColor.withOpacity(0.15), blurRadius: 20, spreadRadius: 0)
-            ]
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_athleteData != null)
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: neonColor, width: 2),
-                    boxShadow: [
-                      BoxShadow(color: neonColor.withOpacity(0.3), blurRadius: 15)
-                    ]
-                  ),
-                  child: CircleAvatar(
-                    backgroundColor: Colors.white24,
-                    backgroundImage: photoBase64.isNotEmpty ? MemoryImage(base64Decode(photoBase64)) : null,
-                    child: photoBase64.isEmpty ? const Icon(CupertinoIcons.person_fill, color: Colors.white, size: 40) : null,
-                  ),
-                ),
-              const SizedBox(height: 16),
-              if (_athleteData != null)
-                Text(
-                  nombrePila.toUpperCase(),
-                  style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 2.0),
-                ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: neonColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: neonColor.withOpacity(0.5))
-                ),
-                child: Text(
-                  _currentState == ScanState.success ? "INGRESO APTO" : _message,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: neonColor,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5
-                  ),
-                ),
-              ),
-              if (_currentState == ScanState.waitingGuardian)
-                const Padding(
-                  padding: EdgeInsets.only(top: 16.0),
-                  child: CircularProgressIndicator(color: Colors.orangeAccent),
-                )
-            ],
+    return GestureDetector(
+      onTap: () {
+        _resetScanner(); // Cierra el modal e invoca resumeCamera() internamente
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(32),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(32),
+              border: Border.all(color: neonColor.withOpacity(0.6), width: 1.5),
+              boxShadow: [
+                 BoxShadow(color: neonColor.withOpacity(0.15), blurRadius: 20, spreadRadius: 0)
+              ]
+            ),
+            child: _currentState == ScanState.loadingAthlete 
+                ? _buildSkeletonLoader(neonColor)
+                : _buildModalContent(neonColor),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSkeletonLoader(Color neonColor) {
+    return Shimmer.fromColors(
+      baseColor: Colors.white30,
+      highlightColor: neonColor.withOpacity(0.6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 80, height: 80,
+            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+          ),
+          const SizedBox(height: 16),
+          Container(width: 150, height: 24, color: Colors.white),
+          const SizedBox(height: 8),
+          Container(width: 100, height: 16, color: Colors.white),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModalContent(Color baseNeonColor) {
+    if (_scannedUid == null || _currentState == ScanState.invalid) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: baseNeonColor.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: baseNeonColor.withOpacity(0.5))
+            ),
+            child: Text(
+              _message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: baseNeonColor,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.5
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('athletes').doc(_scannedUid).snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return _buildSkeletonLoader(baseNeonColor);
+        }
+
+        final model = Athlete.fromMap(_scannedUid!, snapshot.data!.data() as Map<String, dynamic>);
+        
+        // Lógica de Semáforo Diamond Glass (basado en status)
+        Color finalNeonColor = baseNeonColor;
+        String displayStatus = "INGRESO APTO";
+        String upperStatus = model.status.toUpperCase();
+        
+        if (upperStatus.contains('ACCESO AUTORIZADO') || upperStatus.contains('AL DÍA')) {
+          finalNeonColor = const Color(0xFF50C878); // Verde Esmeralda
+          displayStatus = "ACCESO AUTORIZADO";
+        } else if (upperStatus.contains('PAGO PENDIENTE')) {
+          finalNeonColor = const Color(0xFFFFBF00); // Naranja Ámbar
+          displayStatus = "PAGO PENDIENTE";
+        } else if (upperStatus.contains('VENCIDA') || upperStatus.contains('DENEGADO')) {
+          finalNeonColor = const Color(0xFFDC143C); // Rojo Carmesí
+          displayStatus = "ACCESO DENEGADO";
+        } else if (upperStatus.contains('INACTIVO')) {
+          finalNeonColor = const Color(0xFFB0BEC5); // Gris Frost
+          displayStatus = "ATLETA INACTIVO";
+        } else {
+          displayStatus = model.status.toUpperCase();
+        }
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: finalNeonColor, width: 2),
+                boxShadow: [
+                  BoxShadow(color: finalNeonColor.withOpacity(0.3), blurRadius: 15)
+                ]
+              ),
+              child: CircleAvatar(
+                backgroundColor: Colors.white24,
+                backgroundImage: model.photoUrl.isNotEmpty ? NetworkImage(model.photoUrl) : null,
+                child: model.photoUrl.isEmpty ? const Icon(CupertinoIcons.person_fill, color: Colors.white, size: 40) : null,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              model.fullName.split(' ').first.toUpperCase(),
+              style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 2.0),
+            ),
+            if (model.teamOrCategory.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Text(
+                  model.teamOrCategory.toUpperCase(),
+                  style: TextStyle(color: finalNeonColor.withOpacity(0.8), fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 1.2),
+                ),
+              ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: finalNeonColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: finalNeonColor.withOpacity(0.5))
+              ),
+              child: Text(
+                _currentState == ScanState.success ? displayStatus : _message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: finalNeonColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5
+                ),
+              ),
+            ),
+            if (_currentState == ScanState.waitingGuardian)
+              const Padding(
+                padding: EdgeInsets.only(top: 16.0),
+                child: CircularProgressIndicator(color: Colors.orangeAccent),
+                )
+            ],
+          );
+      },
     );
   }
 }
