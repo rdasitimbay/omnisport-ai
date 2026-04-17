@@ -29,6 +29,7 @@ flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks!
+  inhibit_all_warnings!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
@@ -43,6 +44,8 @@ post_install do |installer|
     target.build_configurations.each do |config|
       # 1. Desactiva el error de las comillas dobles (Soluciona los 13 errores actuales)
       config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
+      config.build_settings['WARNING_CFLAGS'] ||= ['$(inherited)']
+      config.build_settings['WARNING_CFLAGS'] << '-Wno-quoted-include-in-framework-header'
       
       # 2. Asegura compatibilidad con el estándar C++ actual
       config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
