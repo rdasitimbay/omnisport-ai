@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/preferences_service.dart';
 import 'language_picker_screen.dart';
@@ -53,11 +54,35 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A192F),
-      body: Center(
-        child: Image.asset(
-          'assets/images/app_logo_shield.png',
-          width: 150, // Tamaño similar al native splash
-        ),
+      body: Stack(
+        children: [
+          Center(
+            child: Shimmer.fromColors(
+              baseColor: Colors.white,
+              highlightColor: Colors.grey.shade300,
+              period: const Duration(milliseconds: 1500),
+              child: Image.asset(
+                'assets/images/app_logo_shield_premium.png',
+                width: 150, // Tamaño similar al native splash
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 40,
+            left: 0,
+            right: 0,
+            child: Text(
+              'POWERED BY ROMMEL ASITIMBAY MORALES',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.5),
+                fontSize: 10,
+                letterSpacing: 2.5,
+                fontWeight: FontWeight.w300,
+              ),
+            ),
+          )
+        ],
       ),
     );
   }
