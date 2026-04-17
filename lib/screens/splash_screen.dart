@@ -12,80 +12,51 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-
+class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
-    _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
-    
-    _controller.forward();
     _routeUser();
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
   Future<void> _routeUser() async {
-    // Retrasar para disfrutar el logo Fade-in (VisionOS Splash)
-    await Future.delayed(const Duration(milliseconds: 2000));
+    // Delay de 1.5s para disfrutar el branding antes de rutear
+    await Future.delayed(const Duration(milliseconds: 1500));
 
     final prefs = PreferencesService();
-
     if (!mounted) return;
 
+    Widget targetScreen;
     if (prefs.preferredLanguage == null) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LanguagePickerScreen()));
-      return;
+      targetScreen = const LanguagePickerScreen();
+    } else if (!prefs.hasSeenOnboarding) {
+      targetScreen = const OnboardingScreen();
+    } else {
+      // Ya vio onboarding y tiene idioma, delegamos la sesión a Firebase a través del AuthGateway
+      targetScreen = const AuthGateway();
     }
 
-    if (!prefs.hasSeenOnboarding) {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const OnboardingScreen()));
-      return;
-    }
-
-    // Ya vio onboarding y tiene idioma, delegamos la sesión a Firebase a través del AuthGateway
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AuthGateway()));
+    // Transición FadeIn suave hacia la siguiente pantalla
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => targetScreen,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 800),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF001F3F), Color(0xFF00E5FF)],
-          ),
-        ),
-        child: Center(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.sports_volleyball, size: 120, color: Colors.white),
-                SizedBox(height: 16),
-                Text(
-                  'OMNISPORT-AI',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 3,
-                  ),
-                ),
-              ],
-            ),
-          ),
+      backgroundColor: const Color(0xFF0A192F),
+      body: Center(
+        child: Image.asset(
+          'assets/images/app_logo_shield.png',
+          width: 150, // Tamaño similar al native splash
         ),
       ),
     );

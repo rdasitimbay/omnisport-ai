@@ -84,6 +84,8 @@
 		<key>NSMicrophoneUsageDescription</key>
 		<string>Este permiso es necesario para funciones futuras de comandos de voz en tus rutinas de entrenamiento.</string>
 		<key>UIStatusBarHidden</key>
+		<true/>
+		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
 	</dict>
 </plist>
