@@ -78,9 +78,9 @@
 			</dict>
 		</array>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>Necesitamos acceso a tu galería para que selecciones una foto para tu perfil de usuario.</string>
+		<string>OmniSport-AI requiere acceso a la galería para subir comprobantes o reportes visuales relacionados al perfil del atleta.</string>
 		<key>NSCameraUsageDescription</key>
-		<string>OmniSport-AI utiliza la cámara para que captures tu foto de perfil de atleta y personalices tu experiencia de entrenamiento.</string>
+		<string>OmniSport-AI requiere acceso a la cámara para el escaneo de códigos QR y verificación de credenciales de atletas en tiempo real.</string>
 		<key>NSMicrophoneUsageDescription</key>
 		<string>Este permiso es necesario para funciones futuras de comandos de voz en tus rutinas de entrenamiento.</string>
 		<key>UIStatusBarHidden</key>
