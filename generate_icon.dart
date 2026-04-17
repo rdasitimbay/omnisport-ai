@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 
 void main() {
@@ -11,17 +12,17 @@ void main() {
   }
 
   // Calculate new size (125% -> image takes ~80% of canvas)
-  final double scaleFactor = 1.25;
-  final newWidth = (original.width * scaleFactor).toInt();
-  final newHeight = (original.height * scaleFactor).toInt();
+  final double scaleFactor = 1.35; // Un poco más de aire
+  final int maxDimension = math.max(original.width, original.height);
+  final int canvasSize = (maxDimension * scaleFactor).toInt();
 
   // Create a solid Navy Blue background (#0A192F = R:10, G:25, B:47)
-  final canvas = img.Image(width: newWidth, height: newHeight);
+  final canvas = img.Image(width: canvasSize, height: canvasSize);
   img.fill(canvas, color: img.ColorRgb8(10, 25, 47));
 
-  // Center the original logo onto the canvas
-  final dstX = (newWidth - original.width) ~/ 2;
-  final dstY = (newHeight - original.height) ~/ 2;
+  // Center the original logo onto the SQUARE canvas
+  final dstX = (canvasSize - original.width) ~/ 2;
+  final dstY = (canvasSize - original.height) ~/ 2;
   
   img.compositeImage(canvas, original, dstX: dstX, dstY: dstY);
 
