@@ -22,7 +22,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _routeUser() async {
     // Delay de 1.5s para disfrutar el branding antes de rutear
-    await Future.delayed(const Duration(milliseconds: 1500));
+    await Future.delayed(const Duration(milliseconds: 30000));
 
     final prefs = PreferencesService();
     if (!mounted) return;
