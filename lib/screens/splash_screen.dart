@@ -54,35 +54,35 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A192F),
-      body: Stack(
-        children: [
-          Center(
-            child: Shimmer.fromColors(
-              baseColor: Colors.white,
-              highlightColor: Colors.grey.shade300,
-              period: const Duration(milliseconds: 1500),
+      body: Shimmer.fromColors(
+        baseColor: Colors.white,
+        highlightColor: Colors.grey.shade400,
+        period: const Duration(milliseconds: 2000),
+        child: Stack(
+          children: [
+            Center(
               child: Image.asset(
-                'assets/images/app_logo_shield_premium.png',
+                'assets/images/app_logo_shield_premium_fin.png',
                 width: 150, // Tamaño similar al native splash
               ),
             ),
-          ),
-          Positioned(
-            bottom: 40,
-            left: 0,
-            right: 0,
-            child: Text(
-              'POWERED BY ROMMEL ASITIMBAY MORALES',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.5),
-                fontSize: 10,
-                letterSpacing: 2.5,
-                fontWeight: FontWeight.w300,
+            Positioned(
+              bottom: 40,
+              left: 0,
+              right: 0,
+              child: Text(
+                'POWERED BY ROMMEL ASITIMBAY MORALES',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.8),
+                  fontSize: 10,
+                  letterSpacing: 2.5,
+                  fontWeight: FontWeight.w300,
+                ),
               ),
-            ),
-          )
-        ],
+            )
+          ],
+        ),
       ),
     );
   }

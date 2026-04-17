@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:image/image.dart' as img;
 
 void main() {
-  final logoFile = File('assets/images/app_logo_shield_premium.png');
+  final logoFile = File('assets/images/app_logo_shield_premium_fin.png');
   final original = img.decodeImage(logoFile.readAsBytesSync());
 
   if (original == null) {
