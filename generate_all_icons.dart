@@ -11,17 +11,27 @@ void main() {
     return;
   }
 
-  // Find bounding box ignoring faint shadows/noise (alpha < 50)
+  // Find bounding box ignoring the baked-in navy background
   int minX = original.width;
   int minY = original.height;
   int maxX = 0;
   int maxY = 0;
+  
+  final tl = original.getPixel(0, 0);
 
   for (int y = 0; y < original.height; y++) {
     for (int x = 0; x < original.width; x++) {
       final pixel = original.getPixel(x, y);
-      // Ignorar sombras casi invisibles que extienden el lienzo falsamente
-      if (pixel.a > 50) {
+      
+      // Calculate color distance from the top-left background pixel
+      num dr = pixel.r - tl.r;
+      num dg = pixel.g - tl.g;
+      num db = pixel.b - tl.b;
+      num distSq = (dr * dr) + (dg * dg) + (db * db);
+      
+      // If distance > 1000, it's a completely different color (i.e. the silver shield)
+      // ignoring all subtle background noise
+      if (distSq > 1000) {
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
         if (y < minY) minY = y;
