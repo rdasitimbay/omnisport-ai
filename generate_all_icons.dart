@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 
 void main() {
-  final logoFile = File('assets/images/app_logo_shield_premium_fin.png');
+  final logoFile = File('assets/images/logo_app_os_ai_pure.png');
   final original = img.decodeImage(logoFile.readAsBytesSync());
 
   if (original == null) {
@@ -11,27 +11,18 @@ void main() {
     return;
   }
 
-  // Find bounding box ignoring the baked-in navy background
+  // Find bounding box ignoring transparent pixels
   int minX = original.width;
   int minY = original.height;
   int maxX = 0;
   int maxY = 0;
-  
-  final tl = original.getPixel(0, 0);
 
   for (int y = 0; y < original.height; y++) {
     for (int x = 0; x < original.width; x++) {
       final pixel = original.getPixel(x, y);
       
-      // Calculate color distance from the top-left background pixel
-      num dr = pixel.r - tl.r;
-      num dg = pixel.g - tl.g;
-      num db = pixel.b - tl.b;
-      num distSq = (dr * dr) + (dg * dg) + (db * db);
-      
-      // If distance > 1000, it's a completely different color (i.e. the silver shield)
-      // ignoring all subtle background noise
-      if (distSq > 1000) {
+      // If alpha is greater than zero, it's the pure shield!
+      if (pixel.a > 0) {
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
         if (y < minY) minY = y;
@@ -64,7 +55,7 @@ void main() {
   print('iOS icon generated spanning 80% of canvas.');
 
   // ---- ANDROID FOREGROUND GENERATION (Needs to be smaller to fit in the 66% Mask) ----
-  final int canvasSizeAndroid = (maxDimIOS / 0.60).toInt(); // 60% relative to 108dp
+  final int canvasSizeAndroid = (maxDimIOS / 0.65).toInt(); // 65% relative to 108dp
   final canvasAndroid = img.Image(width: canvasSizeAndroid, height: canvasSizeAndroid);
   // Transparent canvas for android foreground
   final dstXAndroid = (canvasSizeAndroid - croppedWidth) ~/ 2;

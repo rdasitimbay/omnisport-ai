@@ -62,8 +62,8 @@ class _SplashScreenState extends State<SplashScreen> {
           children: [
             Center(
               child: Image.asset(
-                'assets/images/app_logo_shield_premium_fin.png',
-                width: 127, // 15% de reduccion de 150
+                'assets/images/logo_app_os_ai_pure.png',
+                width: 127,
               ),
             ),
             Positioned(
