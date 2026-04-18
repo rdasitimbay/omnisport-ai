@@ -11,22 +11,42 @@ void main() {
     return;
   }
 
-  // Calculate new size (125% -> image takes ~80% of canvas)
-  final double scaleFactor = 1.35; // Un poco más de aire
-  final int maxDimension = math.max(original.width, original.height);
-  final int canvasSize = (maxDimension * scaleFactor).toInt();
+  // Find bounding box to remove transparent padding
+  int minX = original.width;
+  int minY = original.height;
+  int maxX = 0;
+  int maxY = 0;
+
+  for (int y = 0; y < original.height; y++) {
+    for (int x = 0; x < original.width; x++) {
+      final pixel = original.getPixel(x, y);
+      if (pixel.a > 0) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  final croppedWidth = maxX - minX + 1;
+  final croppedHeight = maxY - minY + 1;
+  final cropped = img.copyCrop(original, x: minX, y: minY, width: croppedWidth, height: croppedHeight);
+
+  // The shield must occupy exactly 65% of the iOS App Icon Canvas
+  final int maxDim = math.max(croppedWidth, croppedHeight);
+  final int canvasSize = (maxDim / 0.65).toInt();
 
   // Create a solid Navy Blue background (#0A192F = R:10, G:25, B:47)
   final canvas = img.Image(width: canvasSize, height: canvasSize);
   img.fill(canvas, color: img.ColorRgb8(10, 25, 47));
 
-  // Center the original logo onto the SQUARE canvas
-  final dstX = (canvasSize - original.width) ~/ 2;
-  final dstY = (canvasSize - original.height) ~/ 2;
+  // Center the cropped logo onto the SQUARE canvas
+  final dstX = (canvasSize - croppedWidth) ~/ 2;
+  final dstY = (canvasSize - croppedHeight) ~/ 2;
   
-  img.compositeImage(canvas, original, dstX: dstX, dstY: dstY);
+  img.compositeImage(canvas, cropped, dstX: dstX, dstY: dstY);
 
-  // Save the result
   File('assets/images/ios_icon.png').writeAsBytesSync(img.encodePng(canvas));
-  print('Successfully generated ios_icon.png with navy blue background and 80% safe area scaling.');
+  print('Successfully generated ios_icon.png bounded exactly to 65% safe area.');
 }
