@@ -1,0 +1,16 @@
+=== AUDITORÍA FORENSE DE INGESTA ===
+Fecha Ejecución: 2026-04-21T13:01:55.000
+Institución Base: sim_stress_validator_v1
+Modo del Sistema: SIMULACIÓN DRY RUN (Base de datos NO alterada)
+
+[Resumen Analítico]
+  Registros Procesados : 10
+  Aprobados (Exitosos) : 6
+  Rechazados (Errores) : 4
+
+[Detalle de Resultados Forenses]
+Fila 5 (Ana Gomez): [ERROR DUPLICIDAD] El DNI "1723456789" ya se encuentra registrado en el sistema.
+Fila 6 (Luis Torres): [ERROR CRÍTICO LOPDP] Consentimiento no proporcionado o vacío.
+Fila 7 (Carmen Viteri): [ERROR FORMATO] La fecha "20-04-2026" no cumple YYYY-MM-DD.
+Fila 8 (Jorge Silva): [ERROR FORMATO] Email inválido ("jorge.test.com" no contiene @ / dominio).
+====================================

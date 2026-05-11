@@ -1,0 +1,124 @@
+{"users": [
+{
+  "localId": "5VvCCtJmGlZ6TFHP4OvyKY6tefh2",
+  "email": "rom_dav@hotmail.com",
+  "emailVerified": false,
+  "passwordHash": "AazxBTm0QrQTVIpKWkdV1nOiiWKhmwjZncGNMN603pogWwKi+hX7WnM6y724c+FsMETXel/r4RN0o3uaAT3pBQ==",
+  "salt": "x8qiGNDbBS7jxg==",
+  "lastSignedInAt": "1775184528909",
+  "createdAt": "1775184528909",
+  "providerUserInfo": []
+},
+{
+  "localId": "H7ueqEL2pNW02rcHOvKbmkJhbie2",
+  "email": "katherinesanchez1713@gmail.com",
+  "emailVerified": true,
+  "displayName": "katherine sanchez",
+  "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocLWHpovqmhA_anU9IIqkwV6RGKnj7F6Zx42eRm5UPbixRjdXg=s96-c",
+  "lastSignedInAt": "1774900365280",
+  "createdAt": "1774900365280",
+  "providerUserInfo": [
+    {
+      "providerId": "google.com",
+      "rawId": "102555802810233280584",
+      "email": "katherinesanchez1713@gmail.com",
+      "displayName": "katherine sanchez",
+      "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocLWHpovqmhA_anU9IIqkwV6RGKnj7F6Zx42eRm5UPbixRjdXg=s96-c"
+    }
+  ]
+},
+{
+  "localId": "JkdL1bGBNxbNv9TJzJLRYuQJ2hm1",
+  "email": "rominaasitimbay.chanuwu77@gmail.com",
+  "emailVerified": true,
+  "displayName": "Romina Asitimbay",
+  "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocKAsvteYBCWjyW1qEb8b-tfOWWJ7bYoq0xl4gmFPcxb11otJu25=s96-c",
+  "lastSignedInAt": "1775226806215",
+  "createdAt": "1774913050998",
+  "providerUserInfo": [
+    {
+      "providerId": "google.com",
+      "rawId": "101265748653244449086",
+      "email": "rominaasitimbay.chanuwu77@gmail.com",
+      "displayName": "Romina Asitimbay",
+      "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocKAsvteYBCWjyW1qEb8b-tfOWWJ7bYoq0xl4gmFPcxb11otJu25=s96-c"
+    }
+  ]
+},
+{
+  "localId": "KauKEug2RVYVsO0DEFSVUMnmMMz2",
+  "email": "9gfnzfz759@privaterelay.appleid.com",
+  "emailVerified": true,
+  "lastSignedInAt": "1775495983001",
+  "createdAt": "1774883201715",
+  "providerUserInfo": []
+},
+{
+  "localId": "QKMTwYj8a0bsA5i9sjSCAxGVycl1",
+  "email": "asitimbay.rommel@gmail.com",
+  "emailVerified": true,
+  "displayName": "Rommel Asitimbay Morales",
+  "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocKk9rpCD7gumG_Ah4PNVd7pr1A6Vk8BJQH6VyYSzSR25HG5yh-VIw=s96-c",
+  "lastSignedInAt": "1777062622067",
+  "createdAt": "1774987459893",
+  "providerUserInfo": [
+    {
+      "providerId": "google.com",
+      "rawId": "112762554030439409659",
+      "email": "asitimbay.rommel@gmail.com",
+      "displayName": "Rommel Asitimbay Morales",
+      "photoUrl": "https://lh3.googleusercontent.com/a/ACg8ocKk9rpCD7gumG_Ah4PNVd7pr1A6Vk8BJQH6VyYSzSR25HG5yh-VIw=s96-c"
+    }
+  ]
+},
+{
+  "localId": "S6z0KY7o0QW6Z5rvYbI2N2VgJky2",
+  "lastSignedInAt": "1775183240837",
+  "createdAt": "1775183240837",
+  "providerUserInfo": []
+},
+{
+  "localId": "XKPuHFg2BHQpgigq3RiP1qMw7xb2",
+  "lastSignedInAt": "1774796000436",
+  "createdAt": "1774796000436"
+},
+{
+  "localId": "c9DeqXPnKIX7V0kWlr3EN63A3iu2",
+  "lastSignedInAt": "1774723333183",
+  "createdAt": "1774723333183"
+},
+{
+  "localId": "kxGYkpuxordWjfuJE0w3qVrkv282",
+  "email": "capo2786@gmail.com",
+  "emailVerified": false,
+  "passwordHash": "gSaJaFcELkoftTgkCZD2XIaDZlEcJ684UBi5Kh8udPHuplu0npa40PJfonbTDVxPrcdA0SqUO5w3D0fsh8YAqw==",
+  "salt": "mzOH+y2GXcATNw==",
+  "lastSignedInAt": "1775487453496",
+  "createdAt": "1775228105901",
+  "providerUserInfo": []
+},
+{
+  "localId": "mtVtZsg7ymNCVfsTeBIi1AtorLl1",
+  "email": "admin@omnisport.ai",
+  "emailVerified": false,
+  "passwordHash": "+L3QkeGvrJui2igcgO0b3F4sBCccg9qdsR2WjA7siiXGheJeWZuNJD5iBWoBq1SfSttGnGGZFqTzHFIES3gzOg==",
+  "salt": "klMg7K6XuJijeA==",
+  "lastSignedInAt": "1777062302153",
+  "createdAt": "1777062302153",
+  "providerUserInfo": []
+},
+{
+  "localId": "oW6TK23InYTgY0Dx3P4kcemKkH73",
+  "lastSignedInAt": "1774723766008",
+  "createdAt": "1774723766008"
+},
+{
+  "localId": "t1CLTTrBzAYSYDqjTfBUPbMgHhi1",
+  "lastSignedInAt": "1774727616002",
+  "createdAt": "1774727616002"
+},
+{
+  "localId": "xikDv82pqmOhguhzNZKq79F7Hch2",
+  "lastSignedInAt": "1774811511752",
+  "createdAt": "1774811511752"
+}]}

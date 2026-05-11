@@ -8,11 +8,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:app/utils/scanner_logic.dart';
 import 'package:app/models/athlete.dart'; // Importante: importar el modelo
+import '../services/offline_sync_service.dart';
 
 enum ScanState { scanningAthlete, loadingAthlete, success, waitingGuardian, scanningGuardian, invalid }
 
 class QrScannerScreen extends StatefulWidget {
-  const QrScannerScreen({Key? key}) : super(key: key);
+  final FirebaseFirestore? firestore;
+  final bool isTestMode;
+  const QrScannerScreen({Key? key, this.firestore, this.isTestMode = false}) : super(key: key);
 
   @override
   _QrScannerScreenState createState() => _QrScannerScreenState();
@@ -23,8 +26,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     detectionSpeed: DetectionSpeed.normal, // Cambiado para evitar bloqueo en Android
   );
   
-  // Caché de simulacion offline (TKT-004)
-  final Map<String, dynamic> _offlineLogsMap = {};
+  // El caché de simulación offline fue reemplazado por OfflineSyncService (TKT-004)
 
   ScanState _currentState = ScanState.scanningAthlete;
   
@@ -99,7 +101,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       await Future.delayed(const Duration(milliseconds: 600)); // Efecto dramático de red para ver el Skeleton
 
       try {
-        final doc = await FirebaseFirestore.instance.collection('athletes').doc(uid).get();
+        final doc = await (widget.firestore ?? FirebaseFirestore.instance).collection('athletes').doc(uid).get();
         if (!doc.exists) {
           _setInvalid("Usuario ($uid) no encontrado en BD");
           return;
@@ -157,13 +159,16 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
   void _logAccess(String uid, String method) {
     final timestamp = DateTime.now().toIso8601String();
-    _offlineLogsMap['$uid-$timestamp'] = {
+    final logData = {
       'uid': uid,
       'timestamp': timestamp,
       'method': method,
-      'synced': false // flag offline (preparación para TKT-004)
     };
-    print("LOG OFFLINE SAVED: ${_offlineLogsMap['$uid-$timestamp']}");
+    
+    // Fuego y olvido: guardar localmente e intentar sincronizar
+    OfflineSyncService.saveLogLocally(logData).then((_) {
+      OfflineSyncService.syncLogs(firestore: widget.firestore);
+    });
   }
 
   void _simulateOpalAINotification(String uid, String name) {
@@ -205,9 +210,11 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     });
     
     // IMPORTANTE PARA ANDROID: Reactiva el controlador para continuar leyendo
-    try {
-      _scannerController.start();
-    } catch (_) {}
+    if (!widget.isTestMode) {
+      try {
+        _scannerController.start();
+      } catch (_) {}
+    }
   }
 
   @override
@@ -223,10 +230,11 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       body: Stack(
         children: [
           // Mobile Scanner Fullscreen
-          MobileScanner(
-            controller: _scannerController,
-            onDetect: _onDetect,
-          ),
+          if (!widget.isTestMode)
+            MobileScanner(
+              controller: _scannerController,
+              onDetect: _onDetect,
+            ),
           
           // Overlay Oscurecido para enfoque
           Container(
@@ -379,7 +387,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     }
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('athletes').doc(_scannedUid).snapshots(),
+      stream: (widget.firestore ?? FirebaseFirestore.instance).collection('athletes').doc(_scannedUid).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           print("ERROR EN STREAM: ${snapshot.error}");

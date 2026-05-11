@@ -4,78 +4,167 @@ import { onCall, HttpsError, CallableRequest } from "firebase-functions/v2/https
 admin.initializeApp();
 const db = admin.firestore();
 
-// ─── CONSTANTES ────────────────────────────────────────────────────────────────
+// =============================================================================
+// SECCIÓN 1: CONSTANTES DE FIRESTORE
+// =============================================================================
 
-// Firestore WriteBatch: máx 500 operaciones por lote.
-// Cada atleta genera 2 escrituras (root + private/sensitive_data) → 250 por batch.
-const MAX_OPS_PER_BATCH = 500;
-const ATHLETES_PER_BATCH = MAX_OPS_PER_BATCH / 2;
-
-// Firestore 'in' query: máx 30 valores por cláusula.
+// WriteBatch: máx 500 ops. Cada atleta = 2 writes → 250 atletas por lote.
+const ATHLETES_PER_BATCH = 250;
+// Cláusula 'in': máx 30 valores por query → O(N/30) en deduplicación.
 const FIRESTORE_IN_LIMIT = 30;
 
-// ─── TIPOS ────────────────────────────────────────────────────────────────────
+// =============================================================================
+// SECCIÓN 2: CONTRATOS HIVE TYPEADAPTER
+//
+// REGLA DE ORO: Todos los timestamps se envían como Unix milliseconds (number).
+// Hive TypeAdapters no pueden serializar Firestore Timestamp ni DateTime directamente.
+// El colega Flutter debe implementar @HiveType con los typeId y @HiveField con los
+// índices definidos aquí. Cualquier cambio en este archivo rompe la sincronización.
+//
+// Tipos primitivos permitidos en Hive sin adaptador custom:
+//   String, int, double, bool, List<primitive>, Map<String, primitive>
+// =============================================================================
 
-interface ValidatedRecord {
-  rowNumber: number;
-  name: string;
-  dni: string;
-  email: string;
-  phone: string;
-  team: string;
-  consentDate: string;
+/**
+ * @HiveType(typeId: 10)
+ * Resultado de ingesta masiva — cacheable para historial de operaciones del admin.
+ */
+interface IngestionSummaryHive {
+  institutionId: string;  // @HiveField(0)
+  total:         number;  // @HiveField(1) - registros en el CSV
+  valid:         number;  // @HiveField(2) - atletas persistidos correctamente
+  failed:        number;  // @HiveField(3) - rechazados por formato/LOPDP
+  duplicates:    number;  // @HiveField(4) - DNIs ya existentes en el sistema
+  batchCount:    number;  // @HiveField(5) - lotes de WriteBatch ejecutados
+  executedAtMs:  number;  // @HiveField(6) - Unix ms del servidor (no del cliente)
+  adminId:       string;  // @HiveField(7) - UID del admin que ejecutó la ingesta
 }
+
+/**
+ * @HiveType(typeId: 11)
+ * Entrada de log de acceso a dato sensible — cacheable para auditoría offline.
+ * Art. 37 LOPDP: trazabilidad de cada visualización de DNI.
+ */
+interface AuditLogEntryHive {
+  logId:         string;  // @HiveField(0) - Firestore document ID del audit_log
+  action:        string;  // @HiveField(1) - ej. 'unmask_dni'
+  athleteId:     string;  // @HiveField(2) - UID del atleta afectado
+  adminId:       string;  // @HiveField(3) - UID del admin que accedió
+  adminEmail:    string;  // @HiveField(4) - email del admin (del JWT)
+  institutionId: string;  // @HiveField(5) - institución del admin
+  timestampMs:   number;  // @HiveField(6) - Unix ms del servidor
+}
+
+/**
+ * @HiveType(typeId: 12)
+ * Comprobante de borrado LOPDP — cacheable como evidencia del Derecho al Olvido.
+ * Art. 16 LOPDP: el comprobante persiste en Hive incluso tras borrar el perfil.
+ */
+interface ErasureReceiptHive {
+  receiptId:     string;  // @HiveField(0) - ID del audit_log como comprobante legal
+  targetUid:     string;  // @HiveField(1) - UID del atleta borrado
+  erasureType:   string;  // @HiveField(2) - 'SELF_ERASURE' | 'ADMIN_ERASURE'
+  performedBy:   string;  // @HiveField(3) - UID del ejecutor
+  institutionId: string;  // @HiveField(4) - institución del atleta borrado
+  completedAtMs: number;  // @HiveField(5) - Unix ms de confirmación en servidor
+}
+
+/**
+ * @HiveType(typeId: 13)
+ * Cola de logs de acceso QR pendientes de sincronización.
+ * Reemplaza la escritura directa en access_logs desde OfflineSyncService.
+ * Art. 37 LOPDP: el registro de entrada/salida es inalterable una vez sincronizado.
+ */
+interface OfflineAccessLogHive {
+  athleteId:    string;   // @HiveField(0) - UID del atleta escaneado
+  scannedByUid: string;   // @HiveField(1) - UID del usuario que escaneó
+  eventType:    string;   // @HiveField(2) - 'ENTRY' | 'EXIT'
+  locationId:   string;   // @HiveField(3) - ID del punto de acceso
+  clientMs:     number;   // @HiveField(4) - Unix ms del cliente al momento del scan
+  synced:       boolean;  // @HiveField(5) - false hasta confirmación del servidor
+}
+
+/** Respuesta de syncAccessLog — confirma cada log persistido. */
+interface SyncAccessLogResponse {
+  syncedCount:  number;   // @HiveField(0) en el response wrapper (no se cachea)
+  serverMs:     number;   // @HiveField(1) - Unix ms del servidor al procesar
+}
+
+// =============================================================================
+// SECCIÓN 3: TIPOS DE REQUEST (entrada desde Flutter)
+// =============================================================================
 
 interface IngestionRequest {
-  csv: string;
+  csv:           string;
   institutionId: string;
-}
-
-interface IngestionResponse {
-  total: number;
-  valid: number;
-  failed: number;
 }
 
 interface LogAccessRequest {
   athleteId: string;
-  action: string;
+  action:    string;
 }
 
 interface ErasureRequest {
   uid: string;
 }
 
-// ─── GUARDS DE AUTENTICACIÓN ───────────────────────────────────────────────────
+interface SyncAccessLogRequest {
+  logs: OfflineAccessLogHive[];
+}
+
+// =============================================================================
+// SECCIÓN 4: GUARDS DE AUTENTICACIÓN
+// =============================================================================
 
 function assertAdmin(request: CallableRequest): void {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "No autenticado.");
   }
   if (request.auth.token["role"] !== "admin") {
-    throw new HttpsError("permission-denied", "Solo administradores pueden ejecutar esta operación.");
+    throw new HttpsError(
+      "permission-denied",
+      "Solo administradores pueden ejecutar esta operación."
+    );
+  }
+}
+
+function assertAuthenticated(request: CallableRequest): void {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "No autenticado.");
+  }
+  // Art. 10 LOPDP: consent_signed requerido para cualquier operación de datos.
+  if (!request.auth.token["consent_signed"]) {
+    throw new HttpsError(
+      "permission-denied",
+      "Consentimiento del tutor legal no firmado. Completa el proceso de onboarding."
+    );
   }
 }
 
 function assertAdminOrSelf(request: CallableRequest, targetUid: string): void {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "No autenticado.");
-  }
-  const isAdmin = request.auth.token["role"] === "admin";
-  const isSelf = request.auth.uid === targetUid;
+  assertAuthenticated(request);
+  const isAdmin = request.auth!.token["role"] === "admin";
+  const isSelf  = request.auth!.uid === targetUid;
   if (!isAdmin && !isSelf) {
     throw new HttpsError("permission-denied", "Operación no autorizada.");
   }
 }
 
-// ─── HELPERS DE PARSING ────────────────────────────────────────────────────────
+// =============================================================================
+// SECCIÓN 5: HELPERS
+// =============================================================================
 
+/** Parsea y valida el CSV. Retorna registros válidos y conteo de fallidos. */
 function parseAndValidateCsv(csvString: string): {
-  valid: ValidatedRecord[];
+  valid: Array<{
+    rowNumber: number;
+    name: string; dni: string; email: string;
+    phone: string; team: string; consentDate: string;
+  }>;
   failed: number;
 } {
   const EMAIL_REGEX = /^[^@]+@[^@]+\.[^@]+/;
-  const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+  const DATE_REGEX  = /^\d{4}-\d{2}-\d{2}$/;
 
   const clean = csvString
     .replace(/\r\n/g, "\n")
@@ -86,12 +175,10 @@ function parseAndValidateCsv(csvString: string): {
   if (lines.length < 2) return { valid: [], failed: 0 };
 
   const headerLine = lines[0].toLowerCase();
-  const separator = headerLine.includes(";") &&
-    headerLine.split(";").length > headerLine.split(",").length
-    ? ";"
-    : ",";
+  const sep = headerLine.includes(";") &&
+    headerLine.split(";").length > headerLine.split(",").length ? ";" : ",";
 
-  const headers = lines[0].split(separator).map((h) =>
+  const headers = lines[0].split(sep).map((h) =>
     h.toLowerCase().replace(/﻿/g, "").trim()
   );
 
@@ -108,18 +195,18 @@ function parseAndValidateCsv(csvString: string): {
   if (nameIdx === -1 || dniIdx === -1 || consentIdx === -1) {
     throw new HttpsError(
       "invalid-argument",
-      `Cabecera CSV inválida. Columnas detectadas: ${headers.join(", ")}`
+      `Cabecera CSV inválida. Detectadas: ${headers.join(", ")}`
     );
   }
 
-  const cell = (row: string[], i: number): string =>
+  const cell = (row: string[], i: number) =>
     i >= 0 && i < row.length ? row[i].trim() : "";
 
-  const valid: ValidatedRecord[] = [];
+  const valid: ReturnType<typeof parseAndValidateCsv>["valid"] = [];
   let failed = 0;
 
   for (let i = 1; i < lines.length; i++) {
-    const row = lines[i].split(separator);
+    const row = lines[i].split(sep);
     if (row.join("").trim() === "") continue;
 
     const name        = cell(row, nameIdx);
@@ -129,7 +216,7 @@ function parseAndValidateCsv(csvString: string): {
     const team        = teamIdx >= 0 ? cell(row, teamIdx) : "Sin Categoría";
     const consentDate = cell(row, consentIdx);
 
-    // Defense in depth: re-validación completa en servidor.
+    // Defense in depth — re-validación completa en servidor.
     if (!consentDate || !DATE_REGEX.test(consentDate)) { failed++; continue; }
     if (!dni)                                           { failed++; continue; }
     if (email && !EMAIL_REGEX.test(email))              { failed++; continue; }
@@ -140,252 +227,313 @@ function parseAndValidateCsv(csvString: string): {
   return { valid, failed };
 }
 
-// Consulta masiva de DNIs existentes usando 'in' (máx 30 por query).
-// Más eficiente que N lecturas individuales — O(N/30) en vez de O(N).
+/**
+ * Verifica duplicados de DNI usando batched 'in' queries.
+ * Complejidad: O(N/30) lecturas vs O(N) individual — crítico para ingestas grandes.
+ */
 async function fetchExistingDnis(dnis: string[]): Promise<Set<string>> {
   const existingDnis = new Set<string>();
   for (let i = 0; i < dnis.length; i += FIRESTORE_IN_LIMIT) {
     const chunk = dnis.slice(i, i + FIRESTORE_IN_LIMIT);
-    const snap = await db
-      .collectionGroup("sensitive_data")
-      .where("dni", "in", chunk)
-      .get();
-    snap.docs.forEach((doc) => {
-      const d = doc.data()["dni"] as string | undefined;
+    const snap  = await db.collectionGroup("sensitive_data")
+      .where("dni", "in", chunk).get();
+    for (const doc of snap.docs) {
+      const d = (doc.data() as Record<string, unknown>)["dni"] as string | undefined;
       if (d) existingDnis.add(d);
-    });
+    }
   }
   return existingDnis;
 }
 
-// ─── FUNCIÓN 1: processBulkIngestion ──────────────────────────────────────────
-//
-// Recibe el CSV desde AdminIngestionController.confirmIngestion().
-// Flujo:
-//   1. Guard: solo admins.
-//   2. Re-valida el CSV (defense in depth).
-//   3. Consulta duplicados con batched 'in' queries.
-//   4. Escribe atletas válidos en batches de 500 operaciones (250 atletas).
-//   5. Convierte consent_date a Firestore Timestamp.
-//   6. Registra el evento en audit_logs.
-//
-// Art. 10 LOPDP: ninguna escritura de datos sensibles desde el cliente Flutter.
-// Art. 26 LOPDP: consent_timestamp se persiste como Timestamp verificado en servidor.
+/**
+ * Escribe en audit_logs con Admin SDK (bypasea allow write: if false de las reglas).
+ * Retorna el document ID para incluirlo en respuestas Hive como comprobante legal.
+ * Art. 37 LOPDP: timestamps generados en servidor, inmutables desde el cliente.
+ */
+async function writeAuditLog(
+  action:      string,
+  performedBy: string,
+  metadata:    Record<string, unknown>
+): Promise<string> {
+  const ref = await db.collection("audit_logs").add({
+    action,
+    performedBy,
+    ...metadata,
+    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return ref.id;
+}
 
-export const processBulkIngestion = onCall<IngestionRequest, IngestionResponse>(
-  { region: "us-central1", timeoutSeconds: 300, memory: "512MiB" },
-  async (request) => {
+// =============================================================================
+// SECCIÓN 6: FUNCIÓN 1 — processBulkIngestion
+//
+// Callable desde AdminIngestionController.confirmIngestion() en Flutter.
+// Retorna IngestionSummaryHive (@HiveType typeId: 10) — cacheable en Hive.
+//
+// Art. 10 LOPDP: ninguna escritura de datos sensibles desde el cliente.
+// Art. 26 LOPDP: consent_date → Firestore Timestamp verificado en servidor.
+// Art. 37 LOPDP: evento de ingesta registrado en audit_logs.
+// =============================================================================
+
+export const processBulkIngestion = onCall<IngestionRequest>(
+  { region: "us-central1", timeoutSeconds: 300, memory: "512MiB" as const },
+  async (request: CallableRequest<IngestionRequest>) => {
     assertAdmin(request);
 
     const { csv, institutionId } = request.data;
-
     if (!csv || !institutionId) {
       throw new HttpsError("invalid-argument", "csv e institutionId son requeridos.");
     }
 
-    // ── Paso 1: Validación de formato ──────────────────────────────────────
+    const executedAtMs = Date.now();
+    const adminId      = request.auth!.uid;
+
+    // ── Paso 1: Validación de formato (defense in depth) ──────────────────
     const { valid: candidates, failed: formatFailed } = parseAndValidateCsv(csv);
 
     if (candidates.length === 0) {
-      await writeAuditLog("BULK_INGESTION_NO_VALID_RECORDS", request.auth!.uid, {
-        institutionId,
-        total: formatFailed,
-        valid: 0,
-        failed: formatFailed,
+      await writeAuditLog("BULK_INGESTION_NO_VALID_RECORDS", adminId, {
+        institutionId, total: formatFailed, valid: 0, failed: formatFailed,
       });
-      return { total: formatFailed, valid: 0, failed: formatFailed };
+      return {
+        institutionId, total: formatFailed, valid: 0,
+        failed: formatFailed, duplicates: 0, batchCount: 0,
+        executedAtMs, adminId,
+      } satisfies IngestionSummaryHive;
     }
 
-    // ── Paso 2: Verificación de duplicados (batched 'in') ──────────────────
-    const allDnis = candidates.map((r) => r.dni);
+    // ── Paso 2: Deduplicación forense por DNI (batched 'in') ──────────────
+    const allDnis      = candidates.map((r) => r.dni);
     const existingDnis = await fetchExistingDnis(allDnis);
+    const toWrite      = candidates.filter((r) => !existingDnis.has(r.dni));
+    const duplicates   = candidates.length - toWrite.length;
+    const totalFailed  = formatFailed + duplicates;
 
-    const toWrite = candidates.filter((r) => !existingDnis.has(r.dni));
-    const duplicateCount = candidates.length - toWrite.length;
-    const totalFailed = formatFailed + duplicateCount;
-
-    // ── Paso 3: Escritura en batches de 500 operaciones ───────────────────
+    // ── Paso 3: Escritura en WriteBatches de 500 ops (250 atletas/lote) ───
+    let batchCount = 0;
     for (let i = 0; i < toWrite.length; i += ATHLETES_PER_BATCH) {
       const chunk = toWrite.slice(i, i + ATHLETES_PER_BATCH);
       const batch = db.batch();
+      batchCount++;
 
       for (const record of chunk) {
         const athleteRef = db.collection("athletes").doc();
 
-        // Documento raíz — datos públicos del atleta.
+        // Documento raíz — datos públicos del atleta en Firestore.
         batch.set(athleteRef, {
           ownerInstitutionId: institutionId,
-          full_name: record.name,
-          teamOrCategory: record.team,
-          paymentStatus: "Pago Pendiente",
-          status: "Inactivo",
-          // Art. 26 LOPDP: consent_timestamp como Timestamp verificado en servidor.
+          full_name:          record.name,
+          teamOrCategory:     record.team,
+          paymentStatus:      "Pago Pendiente",
+          status:             "Inactivo",
+          photoUrl:           "",
+          // Art. 26 LOPDP: Timestamp verificado en servidor, no interpolable.
           consent_timestamp: admin.firestore.Timestamp.fromDate(
             new Date(`${record.consentDate}T00:00:00Z`)
           ),
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          photoUrl: "",
         });
 
-        // Subcolección /private — datos sensibles segregados.
-        // Art. 10 LOPDP: solo Admin SDK puede escribir aquí desde el servidor.
-        const privateRef = athleteRef.collection("private").doc("sensitive_data");
-        batch.set(privateRef, {
-          dni: record.dni,
-          email: record.email,
-          phone: record.phone,
-        });
+        // Subcolección /private — datos sensibles LOPDP.
+        // Solo Admin SDK puede escribir aquí (allow write: if false en cliente).
+        batch.set(
+          athleteRef.collection("private").doc("sensitive_data"),
+          { dni: record.dni, email: record.email, phone: record.phone }
+        );
       }
 
       await batch.commit();
     }
 
     // ── Paso 4: Registro en audit_logs ────────────────────────────────────
-    // Art. 37 LOPDP: registro inalterable de la operación de ingesta.
-    await writeAuditLog("BULK_INGESTION_COMPLETED", request.auth!.uid, {
+    await writeAuditLog("BULK_INGESTION_COMPLETED", adminId, {
       institutionId,
-      total: candidates.length + formatFailed,
-      valid: toWrite.length,
-      failed: totalFailed,
+      total:      candidates.length + formatFailed,
+      valid:      toWrite.length,
+      failed:     totalFailed,
+      duplicates,
+      batchCount,
     });
 
+    // ── Respuesta Hive-nativa (@HiveType typeId: 10) ───────────────────────
     return {
-      total: candidates.length + formatFailed,
-      valid: toWrite.length,
-      failed: totalFailed,
-    };
+      institutionId,
+      total:        candidates.length + formatFailed,
+      valid:        toWrite.length,
+      failed:       totalFailed,
+      duplicates,
+      batchCount,
+      executedAtMs, // Unix ms — Hive int nativo
+      adminId,
+    } satisfies IngestionSummaryHive;
   }
 );
 
-// ─── FUNCIÓN 2: logSensitiveAccess ────────────────────────────────────────────
+// =============================================================================
+// SECCIÓN 7: FUNCIÓN 2 — logSensitiveAccess
 //
-// Registra en audit_logs cada vez que un admin desenmascara un DNI.
-// El cliente Flutter NUNCA escribe directamente en audit_logs (allow write: if false).
+// Callable desde AdminIngestionController.logDniReveal() en Flutter.
+// Retorna AuditLogEntryHive (@HiveType typeId: 11) — cacheable para auditoría offline.
 //
-// Art. 37 LOPDP: registro inalterable, firmado por servidor, con timestamp de Firestore.
-// Art. 10 LOPDP: trazabilidad de acceso a datos sensibles de menores.
+// El cliente Flutter NUNCA escribe en audit_logs directamente.
+// Art. 37 LOPDP: log inalterable, timestamp de servidor, con identidad del admin.
+// =============================================================================
 
-export const logSensitiveAccess = onCall<LogAccessRequest, void>(
+export const logSensitiveAccess = onCall<LogAccessRequest>(
   { region: "us-central1" },
-  async (request) => {
+  async (request: CallableRequest<LogAccessRequest>) => {
     assertAdmin(request);
 
     const { athleteId, action } = request.data;
-
     if (!athleteId || !action) {
       throw new HttpsError("invalid-argument", "athleteId y action son requeridos.");
     }
 
-    const adminToken = request.auth!.token;
+    const token        = request.auth!.token;
+    const adminId      = request.auth!.uid;
+    const adminEmail   = (token["email"] as string | undefined) ?? "";
+    const institutionId = (token["institutionId"] as string | undefined) ?? "";
+    const timestampMs  = Date.now();
 
-    await db.collection("audit_logs").add({
+    // Escribe en audit_logs y obtiene el document ID como comprobante legal.
+    const logId = await writeAuditLog(action, adminId, {
+      athleteId, adminEmail, institutionId,
+    });
+
+    // ── Respuesta Hive-nativa (@HiveType typeId: 11) ───────────────────────
+    // Flutter cachea esta entrada en Hive para auditoría offline y reporte LOPDP.
+    return {
+      logId,       // ID del documento Firestore — prueba forense de la operación
       action,
       athleteId,
-      adminId: request.auth!.uid,
-      adminEmail: adminToken["email"] ?? null,
-      adminInstitutionId: adminToken["institutionId"] ?? null,
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-    });
+      adminId,
+      adminEmail,
+      institutionId,
+      timestampMs,  // Unix ms — Hive int nativo
+    } satisfies AuditLogEntryHive;
   }
 );
 
-// ─── FUNCIÓN 3: requestAthleteErasure ─────────────────────────────────────────
+// =============================================================================
+// SECCIÓN 8: FUNCIÓN 3 — requestAthleteErasure
 //
-// Implementa el Derecho al Olvido (Art. 16 LOPDP) de forma segura y auditada.
-// Puede ser invocada por:
-//   - El propio atleta (auto-borrado desde profile_screen.dart).
-//   - Un admin (borrado por solicitud de tutor legal o resolución legal).
+// Callable desde FirestoreService.requestAthleteErasure() en Flutter.
+// Retorna ErasureReceiptHive (@HiveType typeId: 12) — comprobante legal del borrado.
 //
-// Flujo:
-//   1. Guard: admin o self.
-//   2. Registra INICIO del borrado (audit log persiste antes de borrar datos).
-//   3. Elimina recursivamente el documento del atleta y todas sus subcolecciones.
-//   4. Revoca los refresh tokens del usuario (invalida sesiones activas).
-//   5. Si es borrado por admin: elimina también la cuenta de Firebase Auth.
-//   6. Registra CONFIRMACIÓN del borrado.
+// ORDEN CRÍTICO (Art. 37 LOPDP): audit_log PERSISTE antes del borrado de datos.
+// Si el borrado falla a mitad, el log queda como evidencia del intento.
 //
-// Art. 16 LOPDP: borrado completo e irreversible, auditado con timestamp de servidor.
-// Art. 37 LOPDP: el audit_log del borrado persiste ANTES de borrar los datos.
+// Art. 16 LOPDP: derecho al olvido — borrado completo, irreversible y auditado.
+// =============================================================================
 
-export const requestAthleteErasure = onCall<ErasureRequest, void>(
+export const requestAthleteErasure = onCall<ErasureRequest>(
   { region: "us-central1", timeoutSeconds: 120 },
-  async (request) => {
+  async (request): Promise<ErasureReceiptHive> => {
     const { uid } = request.data;
-
-    if (!uid) {
-      throw new HttpsError("invalid-argument", "uid es requerido.");
-    }
+    if (!uid) throw new HttpsError("invalid-argument", "uid es requerido.");
 
     assertAdminOrSelf(request, uid);
 
-    const callerId = request.auth!.uid;
+    const callerId      = request.auth!.uid;
     const isSelfErasure = callerId === uid;
-    const erasureType = isSelfErasure ? "SELF_ERASURE" : "ADMIN_ERASURE";
+    const erasureType   = isSelfErasure ? "SELF_ERASURE" : "ADMIN_ERASURE";
 
-    // ── Paso 1: Verifica que el atleta existe ─────────────────────────────
-    const athleteRef = db.collection("athletes").doc(uid);
+    // ── Paso 1: Verifica existencia y captura metadata pre-borrado ─────────
+    const athleteRef  = db.collection("athletes").doc(uid);
     const athleteSnap = await athleteRef.get();
 
     if (!athleteSnap.exists) {
-      throw new HttpsError("not-found", `Atleta ${uid} no encontrado en Firestore.`);
+      throw new HttpsError("not-found", `Atleta ${uid} no encontrado.`);
     }
 
-    // ── Paso 2: Audit log ANTES de borrar (Art. 37 LOPDP) ────────────────
-    // El log debe existir aunque el borrado falle a mitad de camino.
+    const institutionId = (athleteSnap.data()?.["ownerInstitutionId"] as string) ?? "";
+    const athleteName   = (athleteSnap.data()?.["full_name"] as string) ?? "Desconocido";
+
+    // ── Paso 2: Audit log INICIADO — antes de borrar (Art. 37 LOPDP) ──────
     await writeAuditLog(`${erasureType}_INITIATED`, callerId, {
-      targetUid: uid,
-      athleteName: athleteSnap.data()?.["full_name"] ?? "Desconocido",
-      institutionId: athleteSnap.data()?.["ownerInstitutionId"] ?? null,
+      targetUid: uid, athleteName, institutionId,
     });
 
-    // ── Paso 3: Borrado recursivo con Admin SDK ───────────────────────────
-    // recursiveDelete elimina el doc raíz + todas sus subcolecciones
-    // (/private, /sport_details, /historial_entrenamientos, etc.).
+    // ── Paso 3: Borrado recursivo — raíz + todas las subcolecciones ────────
+    // recursiveDelete() maneja /private, /sport_details, /historial_entrenamientos.
     await db.recursiveDelete(athleteRef);
 
-    // ── Paso 4: Revocación de tokens (invalida sesiones activas) ──────────
-    // Si el usuario tiene sesión abierta en otro dispositivo, quedará bloqueado
-    // en el próximo request porque consent_signed y role ya no existen.
-    try {
-      await admin.auth().revokeRefreshTokens(uid);
-    } catch {
-      // Si la cuenta ya no existe en Auth, no es un error crítico.
-    }
+    // ── Paso 4: Revocación de refresh tokens ──────────────────────────────
+    // Invalida sesiones activas en cualquier dispositivo.
+    try { await admin.auth().revokeRefreshTokens(uid); } catch { /* ya expirado */ }
 
-    // ── Paso 5: Borrado de cuenta Auth (solo admin-initiated) ─────────────
-    // En self-erasure, el cliente llama user.delete() tras este CF retornar.
-    // En admin-erasure, no hay cliente activo, así que borramos aquí.
+    // ── Paso 5: Borrado de cuenta Auth (solo admin-erasure) ───────────────
+    // En self-erasure: el cliente Flutter llama user.delete() tras este retorno.
     if (!isSelfErasure) {
-      try {
-        await admin.auth().deleteUser(uid);
-      } catch {
-        // Usuario puede no existir en Auth si fue creado solo en Firestore.
-      }
+      try { await admin.auth().deleteUser(uid); } catch { /* usuario ya eliminado */ }
     }
 
-    // ── Paso 6: Confirmación en audit_logs ────────────────────────────────
-    await writeAuditLog(`${erasureType}_COMPLETED`, callerId, {
-      targetUid: uid,
-      deletedAt: new Date().toISOString(),
+    // ── Paso 6: Audit log COMPLETADO — comprobante legal irrefutable ───────
+    const completedAtMs = Date.now();
+    const receiptId = await writeAuditLog(`${erasureType}_COMPLETED`, callerId, {
+      targetUid: uid, institutionId, completedAtMs,
     });
+
+    // ── Respuesta Hive-nativa (@HiveType typeId: 12) ───────────────────────
+    // Este comprobante persiste en Hive incluso después de que el perfil
+    // haya sido borrado de Firestore — evidencia legal del Derecho al Olvido.
+    return {
+      receiptId,    // ID del audit_log de confirmación — prueba forense
+      targetUid: uid,
+      erasureType,
+      performedBy: callerId,
+      institutionId,
+      completedAtMs, // Unix ms — Hive int nativo
+    } satisfies ErasureReceiptHive;
   }
 );
 
-// ─── HELPER INTERNO: writeAuditLog ────────────────────────────────────────────
+// =============================================================================
+// SECCIÓN 9: FUNCIÓN 4 — syncAccessLog (CRÍTICO para OfflineSyncService)
 //
-// Escritura centralizada en audit_logs. Se usa desde todas las funciones.
-// El Admin SDK bypasea 'allow write: if false' de las reglas Firestore.
-// Art. 37 LOPDP: timestamps generados en servidor, no manipulables desde el cliente.
+// Reemplaza la escritura directa en access_logs desde offline_sync_service.dart.
+// La regla 'allow write: if false' en access_logs obliga a que todo log de acceso
+// QR pase por esta Cloud Function.
+//
+// Flutter: llamar desde OfflineSyncService.syncLogs() cuando hay conectividad.
+// El servidor corrige el timestamp con la hora del servidor (anti-manipulación).
+// Art. 37 LOPDP: el registro de entrada/salida es inalterable una vez en servidor.
+// =============================================================================
 
-async function writeAuditLog(
-  action: string,
-  performedBy: string,
-  metadata: Record<string, unknown>
-): Promise<void> {
-  await db.collection("audit_logs").add({
-    action,
-    performedBy,
-    ...metadata,
-    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-  });
-}
+export const syncAccessLog = onCall<SyncAccessLogRequest>(
+  { region: "us-central1" },
+  async (request): Promise<SyncAccessLogResponse> => {
+    assertAuthenticated(request);
+
+    const { logs } = request.data;
+    if (!Array.isArray(logs) || logs.length === 0) {
+      throw new HttpsError("invalid-argument", "logs debe ser un array no vacío.");
+    }
+    // Límite de seguridad: máx 100 logs por llamada para evitar abuso.
+    if (logs.length > 100) {
+      throw new HttpsError("invalid-argument", "Máximo 100 logs por sincronización.");
+    }
+
+    const serverMs = Date.now();
+    const batch    = db.batch();
+
+    for (const log of logs) {
+      if (!log.athleteId || !log.eventType) continue;
+      const docRef = db.collection("access_logs").doc();
+      batch.set(docRef, {
+        athleteId:    log.athleteId,
+        scannedByUid: log.scannedByUid,
+        eventType:    log.eventType,    // 'ENTRY' | 'EXIT'
+        locationId:   log.locationId ?? "",
+        clientMs:     log.clientMs,     // preservado para auditoría de latencia
+        // El timestamp oficial es el del servidor — no manipulable desde el cliente.
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        syncedAt:  admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    await batch.commit();
+
+    return { syncedCount: logs.length, serverMs } satisfies SyncAccessLogResponse;
+  }
+);

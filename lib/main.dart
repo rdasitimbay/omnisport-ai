@@ -11,6 +11,8 @@ import 'screens/admin_dashboard_screen.dart';
 import 'screens/login_screen.dart';
 import 'firebase_options.dart';
 import 'services/preferences_service.dart';
+import 'services/secure_hive_service.dart';
+import 'services/offline_sync_service.dart';
 import 'l10n/app_localizations.dart';
 
 // Gestor de estado global y ultraligero para el idioma de la app
@@ -33,6 +35,10 @@ void main() async {
     // Iniciar el Singleton de Preferencias
     await PreferencesService().init();
     
+    // Iniciar el servicio offline seguro de Hive (TKT-004)
+    await SecureHiveService.init();
+    await OfflineSyncService.init();
+    OfflineSyncService.syncLogs(); // Intentar sincronizar pendientes en background
     // Configurar idioma guardado
     final lang = PreferencesService().preferredLanguage;
     if (lang != null) {

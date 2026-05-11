@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../services/firestore_service.dart';
 
 class QrGeneratorScreen extends StatefulWidget {
   const QrGeneratorScreen({Key? key}) : super(key: key);
@@ -31,10 +32,16 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
   void _updateState() {
     final now = DateTime.now();
     final int currentPeriod = now.millisecondsSinceEpoch ~/ 30000;
-    
+
     // Si quedan 30 segundos plenos, en realidad significa que just now % 30 == 0
     final int secondsLeft = 30 - (now.second % 30);
-    
+
+    if (secondsLeft == 30 && _secondsRemaining != 30) {
+      FirestoreService().refreshToken().catchError((e) {
+        debugPrint('Error refreshing token: $e');
+      });
+    }
+
     setState(() {
       _secondsRemaining = secondsLeft;
       _qrData = _generateJwt(currentPeriod);
@@ -43,10 +50,7 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
 
   String _generateJwt(int period) {
     final user = FirebaseAuth.instance.currentUser;
-    final jwt = JWT({
-      'uid': user?.uid ?? 'unknown_user',
-      'period': period,
-    });
+    final jwt = JWT({'uid': user?.uid ?? 'unknown_user', 'period': period});
     return jwt.sign(SecretKey(_jwtSecret));
   }
 
@@ -99,7 +103,10 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(32),
-                      border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.2),
+                        width: 1.5,
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.1),
@@ -124,10 +131,7 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
                         const Text(
                           "Muestra este QR al Staff en el acceso.",
                           textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
+                          style: TextStyle(color: Colors.white70, fontSize: 14),
                         ),
                         const SizedBox(height: 32),
                         Stack(
@@ -139,9 +143,17 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
                               height: 260,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
+                                gradient: RadialGradient(
+                                  colors: [
+                                    const Color(0xFF00E5FF).withOpacity(0.1),
+                                    const Color(0xFF00E5FF).withOpacity(0.4),
+                                  ],
+                                ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFF00E5FF).withOpacity(0.4),
+                                    color: const Color(
+                                      0xFF00E5FF,
+                                    ).withOpacity(0.4),
                                     blurRadius: 20,
                                     spreadRadius: 2,
                                   ),
@@ -156,7 +168,9 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
                                 value: progress,
                                 strokeWidth: 8,
                                 backgroundColor: Colors.white.withOpacity(0.1),
-                                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF00E5FF)),
+                                valueColor: const AlwaysStoppedAnimation<Color>(
+                                  Color(0xFF00E5FF),
+                                ),
                               ),
                             ),
                             // El Código QR rodeado en un fondo blanco redondeado
@@ -170,7 +184,7 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
                                 data: _qrData,
                                 version: QrVersions.auto,
                                 size: 180,
-                                foregroundColor: const Color(0xFF001F3F), 
+                                foregroundColor: const Color(0xFF001F3F),
                                 errorCorrectionLevel: QrErrorCorrectLevel.H,
                               ),
                             ),

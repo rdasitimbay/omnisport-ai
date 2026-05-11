@@ -255,8 +255,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: Text(
                                 loc.loginTerms,
                                 style: const TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 14,
                                   color: Colors.white,
+                                  fontWeight: FontWeight.bold,
                                   decoration: TextDecoration.underline,
                                   decorationColor: Colors.white,
                                 ),
@@ -264,16 +265,27 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             controlAffinity: ListTileControlAffinity.leading,
                             contentPadding: EdgeInsets.zero,
-                            activeColor: Colors.white,
-                            checkColor: const Color(0xFF003F87),
-                            side: const BorderSide(color: Colors.white70),
+                            activeColor: Colors.orange, // High contrast
+                            checkColor: Colors.black,
+                            side: const BorderSide(color: Colors.white, width: 2),
                           ),
                           const SizedBox(height: 24),
                           SizedBox(
                             width: double.infinity,
                             height: 55,
                             child: ElevatedButton(
-                              onPressed: (_isLoading || !_acceptedTerms) ? null : _submit,
+                              onPressed: () {
+                                if (!_acceptedTerms) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Debes aceptar los términos para continuar'), backgroundColor: Colors.orange),
+                                  );
+                                  return;
+                                }
+                                if (!_isLoading) {
+                                  debugPrint("--- INTENTANDO LOGIN ---");
+                                  _submit();
+                                }
+                              },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: const Color(0xFF003F87),

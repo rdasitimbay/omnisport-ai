@@ -1,13 +1,32 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:hive/hive.dart';
 
+part 'athlete.g.dart';
+
+@HiveType(typeId: 0)
 class Athlete {
+  @HiveField(0)
   final String uid;
+  
+  @HiveField(1)
   final String fullName;
+  
+  @HiveField(2)
   final String photoUrl;
+  
+  @HiveField(3)
   final String teamOrCategory;
+  
+  @HiveField(4)
   final String paymentStatus;
+  
+  @HiveField(5)
   final String status;
+  
+  @HiveField(6)
   final String representativeUid;
+  
+  @HiveField(7)
   final DateTime? lastMedicalReview;
 
   Athlete({
