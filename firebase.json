@@ -1,1 +1,58 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"omnisport-ai","appId":"1:430589318678:android:f312d1927f646f0dc88737","fileOutput":"android/app/google-services.json"}},"ios":{"default":{"projectId":"omnisport-ai","appId":"1:430589318678:ios:7a6f108a45775047c88737","uploadDebugSymbols":false,"fileOutput":"ios/Runner/GoogleService-Info.plist"}},"macos":{"default":{"projectId":"omnisport-ai","appId":"1:430589318678:ios:7a6f108a45775047c88737","uploadDebugSymbols":false,"fileOutput":"macos/Runner/GoogleService-Info.plist"}},"dart":{"lib/firebase_options.dart":{"projectId":"omnisport-ai","configurations":{"web":"1:430589318678:web:151b44a826f62725c88737"}}}}},"hosting":{"public":"build/web","ignore":["firebase.json","**/.*","**/node_modules/**"],"rewrites":[{"source":"**","destination":"/index.html"}]}}
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "lib"
+      ]
+    }
+  ],
+  "hosting": {
+    "public": "build/web",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "omnisport-ai",
+          "appId": "1:430589318678:android:f312d1927f646f0dc88737",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "omnisport-ai",
+          "appId": "1:430589318678:ios:7a6f108a45775047c88737",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "omnisport-ai",
+          "appId": "1:430589318678:ios:7a6f108a45775047c88737",
+          "uploadDebugSymbols": false,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "omnisport-ai",
+          "configurations": {
+            "web": "1:430589318678:web:151b44a826f62725c88737"
+          }
+        }
+      }
+    }
+  }
+}
