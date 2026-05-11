@@ -181,18 +181,10 @@ class TablasScreen extends StatelessWidget {
           const Text('No hay datos del torneo aún', 
             style: TextStyle(color: Colors.white60, fontSize: 16)),
           const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () => firestoreService.seedTournamentData(),
-            icon: const Icon(Icons.refresh),
-            label: const Text('Cargar Datos de Prueba'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white.withOpacity(0.1),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ).copyWith(
-               side: WidgetStateProperty.all(BorderSide(color: Colors.white.withOpacity(0.2)))
-            ),
+          const Text(
+            'El administrador debe cargar los datos del torneo desde el backoffice.',
+            style: TextStyle(color: Colors.white38, fontSize: 13),
+            textAlign: TextAlign.center,
           ),
         ],
       ),

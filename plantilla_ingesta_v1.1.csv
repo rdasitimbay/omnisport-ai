@@ -1,0 +1,11 @@
+full_name,dni,email,phone,teamOrCategory,consent_date
+Juan Perez,1111111111,juan@test.com,123456789,Sub 18,2026-04-20
+Maria Lopez,2222222222,maria@test.com,987654321,Sub 20,2026-04-21
+Carlos Ruiz,3333333333,carlos@test.com,555555555,Mayores,2026-04-21
+Ana Gomez,1723456789,ana@test.com,111222333,Sub 18,2026-04-21
+Luis Torres,4444444444,luis@test.com,444555666,Reserva,
+Carmen Viteri,5555555555,carmen@test.com,222333444,Femenino,20-04-2026
+Jorge Silva,6666666666,jorge.test.com,777888999,Sub 15,2026-04-20
+Raul Diaz,7777777777,raul@test.com,000000000,Sub 12,2026-04-20
+Ximena Cruz,8888888888,ximena@test.com,123123123,Femenino,2026-04-20
+Pedro Paz,9999999999,pedro@test.com,,Sub 10,2026-04-20

@@ -566,7 +566,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   try {
                     final user = FirebaseAuth.instance.currentUser;
                     if (user != null) {
-                      await _firestoreService.deleteAthleteData(user.uid);
+                      // Delega el borrado en cascada a Cloud Function (Admin SDK)
+                    // para poder eliminar la subcolección /private. Art. 16 LOPDP.
+                    await _firestoreService.requestAthleteErasure(user.uid);
                       try {
                         await GoogleSignIn().signOut();
                         await GoogleSignIn().disconnect();

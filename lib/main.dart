@@ -7,6 +7,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'screens/splash_screen.dart';
+import 'screens/admin_dashboard_screen.dart';
+import 'screens/login_screen.dart';
 import 'firebase_options.dart';
 import 'services/preferences_service.dart';
 import 'l10n/app_localizations.dart';
@@ -37,8 +39,10 @@ void main() async {
       appLocaleNotifier.value = Locale(lang);
     }
     
+    // Configurar persistencia local para mantener la sesión abierta
+    await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    
     if (kIsWeb) {
-      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
       final redirectResult = await FirebaseAuth.instance.getRedirectResult();
       if (redirectResult.user != null) {
         debugPrint("Redirect detectado con éxito: ${redirectResult.user?.email}");
@@ -95,7 +99,26 @@ class OmniSportApp extends StatelessWidget {
               elevation: 0,
             ),
           ),
-          home: const SplashScreen(),
+          home: StreamBuilder<User?>(
+            stream: FirebaseAuth.instance.authStateChanges(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Scaffold(
+                  backgroundColor: const Color(0xFF001F3F),
+                  body: Center(child: Text("Auth Error: ${snapshot.error}", style: const TextStyle(color: Colors.white))),
+                );
+              }
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SplashScreen();
+              }
+              final user = snapshot.data;
+              if (user != null) {
+                debugPrint("--- USUARIO AUTENTICADO: ${user.uid} ---");
+                return const AdminDashboardScreen(institutionId: 'inst_piloto_stresstest');
+              }
+              return const LoginScreen();
+            },
+          ),
         );
       },
     );

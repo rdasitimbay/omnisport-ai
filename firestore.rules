@@ -1,0 +1,163 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // CAPA 1: FUNCIONES DE IDENTIDAD
+    // Art. 10 LOPDP — Principio de Seguridad.
+    // Todo acceso requiere autenticación + consentimiento digital del tutor legal.
+    // Los roles llegan como Custom Claims del JWT (sin lectura a la base de datos).
+    // =========================================================================
+
+    function isAuthenticated() {
+      return request.auth != null
+          && request.auth.token.consent_signed == true;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.role == 'admin';
+    }
+
+    function isCoach() {
+      return isAuthenticated() && request.auth.token.role == 'coach';
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // Art. 5 LOPDP — Minimización: valida relación legítima entre el usuario
+    // y la institución del recurso usando el claim institutionId del token.
+    function sameInstitution(resourceInstitutionId) {
+      return request.auth.token.institutionId == resourceInstitutionId;
+    }
+
+    // Resuelve la institutionId del documento padre del atleta para validar
+    // acceso cruzado de coaches a subcolecciones (sport_details, historial).
+    // Art. 5 LOPDP — Minimización: coach solo accede a atletas de su institución.
+    function athleteInstitution(athId) {
+      return get(/databases/$(database)/documents/athletes/$(athId)).data.institutionId;
+    }
+
+    // =========================================================================
+    // CAPA 2: VALIDACIÓN DE ESQUEMA
+    // Art. 10 LOPDP — Principio de Seguridad.
+    // Bloquea escalación de privilegios por auto-escritura: un atleta no puede
+    // modificar rol, institutionId ni ningún campo sensible de su propio documento.
+    // Usa diff() para comparar el documento resultante con el actual — compatible
+    // tanto con update() como con set(..., merge: true) del cliente Flutter.
+    // =========================================================================
+    function isValidAthleteUpdate() {
+      let allowedFields = ['photoUrl', 'bio', 'avatarUrl', 'updatedAt'];
+      return request.resource.data.diff(resource.data)
+                   .affectedKeys()
+                   .hasOnly(allowedFields);
+    }
+
+    // =========================================================================
+    // COLECCIÓN GLOBAL: /{path=**}/private
+    // Wildcard collectionGroup para ingesta masiva (búsqueda de DNI duplicados).
+    // Art. 10 LOPDP — Acceso granular a datos sensibles bajo identidad admin.
+    // =========================================================================
+    match /{path=**}/private/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // =========================================================================
+    // COLECCIÓN: /institutions
+    // Art. 5 LOPDP — Minimización: cada usuario solo accede a su institución.
+    // Art. 10 LOPDP — Solo admins modifican; acceso restringido por institutionId.
+    // =========================================================================
+    match /institutions/{instId} {
+      allow read:  if isAuthenticated() && sameInstitution(instId);
+      allow write: if isAdmin() && sameInstitution(instId);
+
+      // La configuración institucional ya no es pública: requiere autenticación
+      // y pertenencia a la misma institución.
+      match /configuration/{configId} {
+        allow read:  if isAuthenticated() && sameInstitution(instId);
+        allow write: if isAdmin() && sameInstitution(instId);
+      }
+    }
+
+    // =========================================================================
+    // COLECCIÓN: /athletes
+    // Art. 26 LOPDP — Protección reforzada de menores de edad.
+    // Art. 10 LOPDP — Control de acceso granular por rol e institución.
+    // =========================================================================
+    match /athletes/{athId} {
+
+      // Lectura: owner | admin | coach de la misma institución.
+      // Elimina el acceso abierto a cualquier usuario autenticado.
+      allow read: if isOwner(athId)
+               || isAdmin()
+               || (isCoach() && sameInstitution(resource.data.institutionId));
+
+      // Creación: solo admins (proceso de ingesta controlado o backoffice).
+      // El cliente Flutter nunca crea registros de atletas directamente.
+      allow create: if isAdmin();
+
+      // Actualización diferenciada:
+      // - Atleta modifica solo campos no sensibles (isValidAthleteUpdate).
+      // - Admin modifica cualquier campo.
+      allow update: if (isOwner(athId) && isValidAthleteUpdate())
+                 || isAdmin();
+
+      // Art. 16 LOPDP — Derecho al olvido: eliminación privilegiada y auditable.
+      // El cliente solicita el borrado vía Cloud Function (requestAthleteErasure).
+      allow delete: if isAdmin();
+
+      // --- Subcolección: /private ---
+      // DNI, email, datos médicos y contacto del tutor.
+      // Art. 26 LOPDP — Nivel bancario de protección para datos de menores.
+      // El cliente Flutter nunca accede aquí; solo Admin SDK (Cloud Functions).
+      match /private/{docId} {
+        allow read, write: if isAdmin();
+      }
+
+      // --- Subcolección: /sport_details ---
+      // Estadísticas y métricas deportivas por disciplina.
+      // Escritura reservada a admins (ingesta masiva / backoffice).
+      match /sport_details/{sportId} {
+        allow read:  if isOwner(athId)
+                  || isAdmin()
+                  || (isCoach() && sameInstitution(athleteInstitution(athId)));
+        allow write: if isAdmin();
+      }
+
+      // --- Subcolección: /historial_entrenamientos ---
+      // Sesiones de entrenamiento creadas por coaches o admins.
+      // Art. 10 LOPDP — Coach solo escribe para atletas de su institución.
+      match /historial_entrenamientos/{sessionId} {
+        allow read:   if isOwner(athId)
+                   || isAdmin()
+                   || (isCoach() && sameInstitution(athleteInstitution(athId)));
+        allow create: if isAdmin()
+                   || (isCoach() && sameInstitution(athleteInstitution(athId)));
+        // Update y delete son operaciones de admin; el historial no se edita.
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // =========================================================================
+    // COLECCIÓN: /access_logs
+    // Art. 37 LOPDP — Accountability: registro inalterable de entradas/salidas QR.
+    // allow write: if false — el Admin SDK de Cloud Functions bypasea esta regla,
+    // por lo que los logs siguen escribiéndose desde el servidor con integridad total.
+    // =========================================================================
+    match /access_logs/{logId} {
+      allow read:  if isAdmin();
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // COLECCIÓN: /audit_logs
+    // Art. 37 LOPDP — Registro inalterable de todas las acciones privilegiadas.
+    // Solo admins pueden leer; solo Cloud Functions pueden escribir (Admin SDK).
+    // =========================================================================
+    match /audit_logs/{auditId} {
+      allow read:  if isAdmin();
+      allow write: if false;
+    }
+  }
+}
