@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -35,16 +36,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _checkPermissions();
   }
 
-  // Verifica el rol admin leyendo Custom Claims del JWT — sin lectura a Firestore.
-  // Art. 10 LOPDP: control de acceso basado en token firmado por Firebase Auth.
+  // Verifica el rol admin leyendo la colección 'users' en Firestore.
+  // Ajustado para coincidir con el esquema: users -> role -> 'admin'
   Future<void> _checkPermissions() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('No autenticado.');
-      final tokenResult = await user.getIdTokenResult();
-      if (tokenResult.claims?['role'] != 'admin') {
+      
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      
+      if (!doc.exists) {
+        throw Exception('Perfil de usuario no encontrado.');
+      }
+      
+      final role = doc.data()?['role'];
+      
+      if (role != 'admin') {
         throw Exception('Acceso restringido a administradores.');
       }
+      
       if (mounted) setState(() => _isCheckingPermissions = false);
     } catch (e) {
       if (mounted) {
@@ -59,6 +69,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _logout() async => FirebaseAuth.instance.signOut();
 
   void _downloadLogFile(String report, String filename) {
+    if (!kIsWeb) {
+      debugPrint('[Log de Ingesta no descargado — Entorno Nativo]');
+      debugPrint(report);
+      return;
+    }
     final bytes  = utf8.encode(report);
     final blob   = html.Blob([bytes]);
     final url    = html.Url.createObjectUrlFromBlob(blob);
@@ -83,7 +98,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
     if (result == null || result.files.single.bytes == null) return;
 
-    final csvString = utf8.decode(result.files.single.bytes!);
+    String csvString;
+    try {
+      csvString = utf8.decode(result.files.single.bytes!);
+    } catch (e) {
+      // Fallback para CSVs exportados desde Excel que usan ISO-8859-1 (Latin-1) en lugar de UTF-8
+      csvString = latin1.decode(result.files.single.bytes!);
+    }
     setState(() => _isLoadingBulk = true);
 
     // FASE 1: Dry Run — validación sin escritura

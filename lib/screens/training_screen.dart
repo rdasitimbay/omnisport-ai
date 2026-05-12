@@ -57,7 +57,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
         'tipo': 'IA Generated',
       };
 
-      if (connectivityResult.contains(ConnectivityResult.none)) {
+      if (connectivityResult.contains(ConnectivityResult.none) || OfflineSyncService.forceOfflineMode) {
         // Modo offline: Guardar en Hive
         final sessionModel = SessionModel(
           id: DateTime.now().millisecondsSinceEpoch.toString(),

@@ -10,12 +10,20 @@ import 'package:app/utils/scanner_logic.dart';
 import 'package:app/models/athlete.dart'; // Importante: importar el modelo
 import '../services/offline_sync_service.dart';
 
-enum ScanState { scanningAthlete, loadingAthlete, success, waitingGuardian, scanningGuardian, invalid }
+enum ScanState {
+  scanningAthlete,
+  loadingAthlete,
+  success,
+  waitingGuardian,
+  scanningGuardian,
+  invalid,
+}
 
 class QrScannerScreen extends StatefulWidget {
   final FirebaseFirestore? firestore;
   final bool isTestMode;
-  const QrScannerScreen({Key? key, this.firestore, this.isTestMode = false}) : super(key: key);
+  const QrScannerScreen({Key? key, this.firestore, this.isTestMode = false})
+    : super(key: key);
 
   @override
   _QrScannerScreenState createState() => _QrScannerScreenState();
@@ -23,13 +31,14 @@ class QrScannerScreen extends StatefulWidget {
 
 class _QrScannerScreenState extends State<QrScannerScreen> {
   final MobileScannerController _scannerController = MobileScannerController(
-    detectionSpeed: DetectionSpeed.normal, // Cambiado para evitar bloqueo en Android
+    detectionSpeed:
+        DetectionSpeed.normal, // Cambiado para evitar bloqueo en Android
   );
-  
+
   // El caché de simulación offline fue reemplazado por OfflineSyncService (TKT-004)
 
   ScanState _currentState = ScanState.scanningAthlete;
-  
+
   // Datos temporales tras escaneo
   String? _scannedUid;
   Map<String, dynamic>? _athleteData;
@@ -47,11 +56,12 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     if (_isProcessing) return;
 
     // Filtro Debounce (2 segundos) para no bloquear la lectura del mismo código
-    if (_lastScanTime != null && DateTime.now().difference(_lastScanTime!).inSeconds < 2) {
+    if (_lastScanTime != null &&
+        DateTime.now().difference(_lastScanTime!).inSeconds < 2) {
       return;
     }
     _lastScanTime = DateTime.now();
-    
+
     final List<Barcode> barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
 
@@ -60,7 +70,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Detectado: ${rawValue.trim()}', style: const TextStyle(fontWeight: FontWeight.bold)),
+          content: Text(
+            'Detectado: ${rawValue.trim()}',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
           backgroundColor: Colors.blueAccent,
           duration: const Duration(seconds: 4),
         ),
@@ -76,7 +89,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   }
 
   Future<void> _processQR(String jwtToken) async {
-    setState(() { _isProcessing = true; });
+    setState(() {
+      _isProcessing = true;
+    });
 
     final validacion = ScannerLogic.validar(jwtToken);
 
@@ -98,10 +113,15 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         });
       }
 
-      await Future.delayed(const Duration(milliseconds: 600)); // Efecto dramático de red para ver el Skeleton
+      await Future.delayed(
+        const Duration(milliseconds: 600),
+      ); // Efecto dramático de red para ver el Skeleton
 
       try {
-        final doc = await (widget.firestore ?? FirebaseFirestore.instance).collection('athletes').doc(uid).get();
+        final doc = await (widget.firestore ?? FirebaseFirestore.instance)
+            .collection('athletes')
+            .doc(uid)
+            .get();
         if (!doc.exists) {
           _setInvalid("Usuario ($uid) no encontrado en BD");
           return;
@@ -110,7 +130,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         final data = doc.data()!;
         final bool isMinor = _checkIfMinor(data);
         // Aunque tenemos data aquí, UI usará un StreamBuilder para pintar el modelo Athlete
-        
+
         if (mounted) {
           setState(() {
             _athleteData = data;
@@ -127,7 +147,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           }
         } else {
           _logAccess(uid, "athlete_solo");
-          _simulateOpalAINotification(uid, data['fullName'] ?? 'Atleta'); // Opal AI Simulated Local Push
+          _simulateOpalAINotification(
+            uid,
+            data['fullName'] ?? 'Atleta',
+          ); // Opal AI Simulated Local Push
           _setSuccess("Ingreso Apto");
         }
       } catch (e) {
@@ -145,7 +168,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     if (data.containsKey('isMinor')) {
       return data['isMinor'] == true;
     }
-    if (data.containsKey('fecha_nacimiento') && data['fecha_nacimiento'] != null) {
+    if (data.containsKey('fecha_nacimiento') &&
+        data['fecha_nacimiento'] != null) {
       final String dob = data['fecha_nacimiento'];
       try {
         final date = DateTime.parse(dob);
@@ -160,13 +184,14 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   void _logAccess(String uid, String method) {
     final timestamp = DateTime.now().toIso8601String();
     final logData = {
+      'sync_type': 'access_log',
       'uid': uid,
       'timestamp': timestamp,
       'method': method,
     };
-    
+
     // Fuego y olvido: guardar localmente e intentar sincronizar
-    OfflineSyncService.saveLogLocally(logData).then((_) {
+    OfflineSyncService.saveModelLocally(logData).then((_) {
       OfflineSyncService.syncLogs(firestore: widget.firestore);
     });
   }
@@ -176,7 +201,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     final time = DateTime.now().toString().substring(11, 16);
     debugPrint("------------------------------------------");
     debugPrint("🔔 OPAL AI PUSH NOTIFICATION (Simulada)");
-    debugPrint("Mensaje: Opal AI informa: $name ha ingresado al complejo a las $time");
+    debugPrint(
+      "Mensaje: Opal AI informa: $name ha ingresado al complejo a las $time",
+    );
     debugPrint("------------------------------------------");
   }
 
@@ -196,7 +223,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       _message = msg;
     });
     Future.delayed(const Duration(seconds: 2), () {
-      if (mounted && _currentState != ScanState.waitingGuardian) _resetScanner();
+      if (mounted && _currentState != ScanState.waitingGuardian)
+        _resetScanner();
     });
   }
 
@@ -208,7 +236,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       _athleteData = null;
       _scannedUid = null;
     });
-    
+
     // IMPORTANTE PARA ANDROID: Reactiva el controlador para continuar leyendo
     if (!widget.isTestMode) {
       try {
@@ -222,7 +250,14 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Zero Trust Scanner', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+        title: const Text(
+          'Zero Trust Scanner',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -231,38 +266,35 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         children: [
           // Mobile Scanner Fullscreen
           if (!widget.isTestMode)
-            MobileScanner(
-              controller: _scannerController,
-              onDetect: _onDetect,
-            ),
-          
+            MobileScanner(controller: _scannerController, onDetect: _onDetect),
+
           // Overlay Oscurecido para enfoque
           Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.4)
-            ),
+            decoration: BoxDecoration(color: Colors.black.withOpacity(0.4)),
           ),
-          
+
           // Viewport del Scanner
           Center(
             child: Container(
               width: 250,
               height: 250,
               decoration: BoxDecoration(
-                border: Border.all(
-                  color: _getNeonColor(),
-                  width: 3,
-                ),
+                border: Border.all(color: _getNeonColor(), width: 3),
                 borderRadius: BorderRadius.circular(32),
                 boxShadow: [
-                  BoxShadow(color: _getNeonColor().withOpacity(0.3), blurRadius: 20, spreadRadius: 2)
-                ]
+                  BoxShadow(
+                    color: _getNeonColor().withOpacity(0.3),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                  ),
+                ],
               ),
             ),
           ),
-          
+
           // Texto Guía Superior
-          if (_currentState == ScanState.scanningAthlete || _currentState == ScanState.waitingGuardian)
+          if (_currentState == ScanState.scanningAthlete ||
+              _currentState == ScanState.waitingGuardian)
             Positioned(
               top: MediaQuery.of(context).size.height * 0.2,
               left: 20,
@@ -282,12 +314,12 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
           // Modal Diamond Glass Ofuscado Bottom
           if (_currentState != ScanState.scanningAthlete)
-             Positioned(
-               bottom: 80,
-               left: 24,
-               right: 24,
-               child: _buildDiamondModal(),
-             )
+            Positioned(
+              bottom: 80,
+              left: 24,
+              right: 24,
+              child: _buildDiamondModal(),
+            ),
         ],
       ),
     );
@@ -327,10 +359,14 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               borderRadius: BorderRadius.circular(32),
               border: Border.all(color: neonColor.withOpacity(0.6), width: 1.5),
               boxShadow: [
-                 BoxShadow(color: neonColor.withOpacity(0.15), blurRadius: 20, spreadRadius: 0)
-              ]
+                BoxShadow(
+                  color: neonColor.withOpacity(0.15),
+                  blurRadius: 20,
+                  spreadRadius: 0,
+                ),
+              ],
             ),
-            child: _currentState == ScanState.loadingAthlete 
+            child: _currentState == ScanState.loadingAthlete
                 ? _buildSkeletonLoader(neonColor)
                 : _buildModalContent(neonColor),
           ),
@@ -347,8 +383,12 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 80, height: 80,
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+            width: 80,
+            height: 80,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
           ),
           const SizedBox(height: 16),
           Container(width: 150, height: 24, color: Colors.white),
@@ -369,7 +409,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             decoration: BoxDecoration(
               color: baseNeonColor.withOpacity(0.15),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: baseNeonColor.withOpacity(0.5))
+              border: Border.all(color: baseNeonColor.withOpacity(0.5)),
             ),
             child: Text(
               _message,
@@ -378,7 +418,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 color: baseNeonColor,
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
-                letterSpacing: 1.5
+                letterSpacing: 1.5,
               ),
             ),
           ),
@@ -387,7 +427,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     }
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: (widget.firestore ?? FirebaseFirestore.instance).collection('athletes').doc(_scannedUid).snapshots(),
+      stream: (widget.firestore ?? FirebaseFirestore.instance)
+          .collection('athletes')
+          .doc(_scannedUid)
+          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           print("ERROR EN STREAM: ${snapshot.error}");
@@ -397,24 +440,35 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           return _buildSkeletonLoader(baseNeonColor);
         }
 
-        final model = Athlete.fromMap(_scannedUid!, snapshot.data!.data() as Map<String, dynamic>);
-        
+        final model = Athlete.fromMap(
+          _scannedUid!,
+          snapshot.data!.data() as Map<String, dynamic>,
+        );
+
         // Lógica de Semáforo Diamond Glass (basado en status)
         Color finalNeonColor = baseNeonColor;
         String displayStatus = "INGRESO APTO";
-        
+
         // Removemos acentos comunes para la sanitización y evitamos fallos de string
-        String lowerStatus = model.status.trim().toLowerCase()
-          .replaceAll('á', 'a').replaceAll('é', 'e')
-          .replaceAll('í', 'i').replaceAll('ó', 'o').replaceAll('ú', 'u');
-        
-        if (lowerStatus.contains('acceso autorizado') || lowerStatus.contains('al dia')) {
+        String lowerStatus = model.status
+            .trim()
+            .toLowerCase()
+            .replaceAll('á', 'a')
+            .replaceAll('é', 'e')
+            .replaceAll('í', 'i')
+            .replaceAll('ó', 'o')
+            .replaceAll('ú', 'u');
+
+        if (lowerStatus.contains('acceso autorizado') ||
+            lowerStatus.contains('al dia')) {
           finalNeonColor = const Color(0xFF50C878); // Verde Esmeralda
           displayStatus = "ACCESO AUTORIZADO / AL DÍA";
         } else if (lowerStatus.contains('pago pendiente')) {
           finalNeonColor = const Color(0xFFFFBF00); // Naranja Ámbar
           displayStatus = "PAGO PENDIENTE";
-        } else if (lowerStatus.contains('vencida') || lowerStatus.contains('vencido') || lowerStatus.contains('denegado')) {
+        } else if (lowerStatus.contains('vencida') ||
+            lowerStatus.contains('vencido') ||
+            lowerStatus.contains('denegado')) {
           finalNeonColor = const Color(0xFFDC143C); // Rojo Carmesí
           displayStatus = "ACCESO DENEGADO";
         } else if (lowerStatus.contains('inactivo')) {
@@ -434,26 +488,47 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 shape: BoxShape.circle,
                 border: Border.all(color: finalNeonColor, width: 2),
                 boxShadow: [
-                  BoxShadow(color: finalNeonColor.withOpacity(0.3), blurRadius: 15)
-                ]
+                  BoxShadow(
+                    color: finalNeonColor.withOpacity(0.3),
+                    blurRadius: 15,
+                  ),
+                ],
               ),
               child: CircleAvatar(
                 backgroundColor: Colors.white24,
-                backgroundImage: model.photoUrl.isNotEmpty ? NetworkImage(model.photoUrl) : null,
-                child: model.photoUrl.isEmpty ? const Icon(CupertinoIcons.person_fill, color: Colors.white, size: 40) : null,
+                backgroundImage: model.photoUrl.isNotEmpty
+                    ? NetworkImage(model.photoUrl)
+                    : null,
+                child: model.photoUrl.isEmpty
+                    ? const Icon(
+                        CupertinoIcons.person_fill,
+                        color: Colors.white,
+                        size: 40,
+                      )
+                    : null,
               ),
             ),
             const SizedBox(height: 16),
             Text(
               model.fullName.split(' ').first.toUpperCase(),
-              style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 2.0),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2.0,
+              ),
             ),
             if (model.teamOrCategory.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
                   model.teamOrCategory.toUpperCase(),
-                  style: TextStyle(color: finalNeonColor.withOpacity(0.8), fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 1.2),
+                  style: TextStyle(
+                    color: finalNeonColor.withOpacity(0.8),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                  ),
                 ),
               ),
             const SizedBox(height: 12),
@@ -462,7 +537,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               decoration: BoxDecoration(
                 color: finalNeonColor.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: finalNeonColor.withOpacity(0.5))
+                border: Border.all(color: finalNeonColor.withOpacity(0.5)),
               ),
               child: Text(
                 _currentState == ScanState.success ? displayStatus : _message,
@@ -471,7 +546,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                   color: finalNeonColor,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5
+                  letterSpacing: 1.5,
                 ),
               ),
             ),
@@ -479,9 +554,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               const Padding(
                 padding: EdgeInsets.only(top: 16.0),
                 child: CircularProgressIndicator(color: Colors.orangeAccent),
-                )
-            ],
-          );
+              ),
+          ],
+        );
       },
     );
   }

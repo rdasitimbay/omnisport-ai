@@ -11,6 +11,8 @@ import '../models/session_model.dart';
 class OfflineSyncService {
   static StreamSubscription<List<ConnectivityResult>>?
   _connectivitySubscription;
+  static bool forceOfflineMode = false;
+  static String lastSyncResponse = 'No sync attempted';
 
   /// Inicializa la cola de sincronización en background.
   /// Las cajas se inicializan en SecureHiveService.
@@ -53,11 +55,13 @@ class OfflineSyncService {
   /// Revisa la cola tipada y sincroniza de forma silenciosa con FirestoreService
   static Future<void> syncLogs({FirebaseFirestore? firestore}) async {
     if (!await _hasInternetConnection()) {
+      lastSyncResponse = 'Skipped: Offline';
       return;
     }
 
     final box = SecureHiveService.pendingSyncBox;
     if (box.isEmpty) {
+      lastSyncResponse = 'Skipped: Empty Queue';
       return;
     }
 
@@ -82,6 +86,18 @@ class OfflineSyncService {
           } else if (model is Athlete) {
             // Opcional: Podrías querer crear una lógica para updateAthleteData
             keysToDelete.add(key);
+          } else if (model is Map) {
+            final mapModel = Map<String, dynamic>.from(model);
+            if (mapModel['sync_type'] == 'access_log') {
+              final db = firestore ?? FirebaseFirestore.instance;
+              mapModel.remove('sync_type');
+              mapModel['synced_at'] = FieldValue.serverTimestamp();
+              final docRef = db.collection('access_logs').doc();
+              await docRef.set(mapModel);
+              keysToDelete.add(key);
+            } else {
+              keysToDelete.add(key);
+            }
           } else {
             // Datos inválidos o no reconocidos
             keysToDelete.add(key);
@@ -97,10 +113,12 @@ class OfflineSyncService {
     if (keysToDelete.isNotEmpty) {
       try {
         await box.deleteAll(keysToDelete);
+        lastSyncResponse = 'Success: Synced ${keysToDelete.length} records';
         debugPrint(
           'OfflineSync: Background Sync exitosa. Limpiados ${keysToDelete.length} registros del caché tipado.',
         );
       } catch (e) {
+        lastSyncResponse = 'Error cleaning cache: $e';
         debugPrint('OfflineSync: Error al limpiar caché de Hive: $e');
       }
     }
@@ -108,6 +126,7 @@ class OfflineSyncService {
 
   /// Verifica la conexión a Internet real intentando resolver DNS
   static Future<bool> _hasInternetConnection() async {
+    if (forceOfflineMode) return false;
     if (kIsWeb || Platform.environment.containsKey('FLUTTER_TEST')) return true;
     try {
       final result = await InternetAddress.lookup('google.com');

@@ -35,7 +35,22 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.syncAccessLog = exports.requestAthleteErasure = exports.logSensitiveAccess = exports.processBulkIngestion = void 0;
 const admin = __importStar(require("firebase-admin"));
+const firestore_1 = require("firebase-admin/firestore");
+const crypto = __importStar(require("crypto"));
 const https_1 = require("firebase-functions/v2/https");
+// Llave maestra. En producción, debería inyectarse vía process.env o Secret Manager.
+const MASTER_AES_KEY = process.env.MASTER_AES_KEY || "omnisport-ai-super-secret-dev-key";
+// Derivar llave de 32 bytes y IV de 16 bytes de forma determinista para permitir búsquedas (deduplicación)
+const ENCRYPTION_KEY = crypto.createHash('sha256').update(MASTER_AES_KEY).digest();
+const STATIC_IV = crypto.createHash('md5').update(MASTER_AES_KEY).digest();
+function encryptData(text) {
+    if (!text)
+        return text;
+    const cipher = crypto.createCipheriv('aes-256-cbc', ENCRYPTION_KEY, STATIC_IV);
+    let encrypted = cipher.update(text, 'utf8', 'base64');
+    encrypted += cipher.final('base64');
+    return encrypted;
+}
 admin.initializeApp();
 const db = admin.firestore();
 // =============================================================================
@@ -46,17 +61,45 @@ const ATHLETES_PER_BATCH = 250;
 // Cláusula 'in': máx 30 valores por query → O(N/30) en deduplicación.
 const FIRESTORE_IN_LIMIT = 30;
 // =============================================================================
-// SECCIÓN 4: GUARDS DE AUTENTICACIÓN
+// SECCIÓN 4: EMULATOR BRIDGE + GUARDS DE AUTENTICACIÓN
+//
+// IS_EMULATOR es true SOLO cuando el proceso corre dentro del Firebase Emulator.
+// La variable FUNCTIONS_EMULATOR es inyectada automáticamente por el emulador;
+// nunca está presente en Cloud Functions desplegadas en producción.
 // =============================================================================
-function assertAdmin(request) {
+const IS_EMULATOR = process.env["FUNCTIONS_EMULATOR"] === "true";
+// Identidad sintética usada en el emulador cuando no se envía token real.
+// Equivale a un admin de institución de desarrollo — nunca llega a producción.
+const EMULATOR_IDENTITY = {
+    uid: "emulator-admin",
+    token: {
+        role: "admin",
+        institutionId: "inst-dev-001",
+        consent_signed: true,
+        email: "dev@omnisport.local",
+    },
+};
+/**
+ * Devuelve el auth real del request, o la identidad sintética en el emulador.
+ * Centraliza el acceso a request.auth para que los handlers no necesiten !-asserts.
+ */
+function resolveAuth(request) {
+    return request.auth ?? EMULATOR_IDENTITY;
+}
+async function assertAdmin(request) {
+    if (IS_EMULATOR && !request.auth)
+        return;
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "No autenticado.");
     }
-    if (request.auth.token["role"] !== "admin") {
+    const userDoc = await db.collection("users").doc(request.auth.uid).get();
+    if (!userDoc.exists || userDoc.data()?.role !== "admin") {
         throw new https_1.HttpsError("permission-denied", "Solo administradores pueden ejecutar esta operación.");
     }
 }
 function assertAuthenticated(request) {
+    if (IS_EMULATOR && !request.auth)
+        return;
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "No autenticado.");
     }
@@ -65,10 +108,21 @@ function assertAuthenticated(request) {
         throw new https_1.HttpsError("permission-denied", "Consentimiento del tutor legal no firmado. Completa el proceso de onboarding.");
     }
 }
-function assertAdminOrSelf(request, targetUid) {
-    assertAuthenticated(request);
-    const isAdmin = request.auth.token["role"] === "admin";
-    const isSelf = request.auth.uid === targetUid;
+async function assertAdminOrSelf(request, targetUid) {
+    if (IS_EMULATOR && !request.auth)
+        return;
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "No autenticado.");
+    }
+    const auth = resolveAuth(request);
+    const isSelf = auth.uid === targetUid;
+    const userDoc = await db.collection("users").doc(auth.uid).get();
+    const isAdmin = userDoc.exists && userDoc.data()?.role === "admin";
+    if (!isAdmin) {
+        if (!request.auth.token["consent_signed"]) {
+            throw new https_1.HttpsError("permission-denied", "Consentimiento del tutor legal no firmado. Completa el proceso de onboarding.");
+        }
+    }
     if (!isAdmin && !isSelf) {
         throw new https_1.HttpsError("permission-denied", "Operación no autorizada.");
     }
@@ -137,8 +191,10 @@ function parseAndValidateCsv(csvString) {
  */
 async function fetchExistingDnis(dnis) {
     const existingDnis = new Set();
-    for (let i = 0; i < dnis.length; i += FIRESTORE_IN_LIMIT) {
-        const chunk = dnis.slice(i, i + FIRESTORE_IN_LIMIT);
+    // Ciframos los DNIs de la consulta para buscar coincidencias deterministas
+    const encryptedDnis = dnis.map(encryptData);
+    for (let i = 0; i < encryptedDnis.length; i += FIRESTORE_IN_LIMIT) {
+        const chunk = encryptedDnis.slice(i, i + FIRESTORE_IN_LIMIT);
         const snap = await db.collectionGroup("sensitive_data")
             .where("dni", "in", chunk).get();
         for (const doc of snap.docs) {
@@ -159,7 +215,7 @@ async function writeAuditLog(action, performedBy, metadata) {
         action,
         performedBy,
         ...metadata,
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        timestamp: firestore_1.FieldValue.serverTimestamp(),
     });
     return ref.id;
 }
@@ -174,13 +230,13 @@ async function writeAuditLog(action, performedBy, metadata) {
 // Art. 37 LOPDP: evento de ingesta registrado en audit_logs.
 // =============================================================================
 exports.processBulkIngestion = (0, https_1.onCall)({ region: "us-central1", timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
-    assertAdmin(request);
+    await assertAdmin(request);
     const { csv, institutionId } = request.data;
     if (!csv || !institutionId) {
         throw new https_1.HttpsError("invalid-argument", "csv e institutionId son requeridos.");
     }
     const executedAtMs = Date.now();
-    const adminId = request.auth.uid;
+    const adminId = resolveAuth(request).uid;
     // ── Paso 1: Validación de formato (defense in depth) ──────────────────
     const { valid: candidates, failed: formatFailed } = parseAndValidateCsv(csv);
     if (candidates.length === 0) {
@@ -193,10 +249,10 @@ exports.processBulkIngestion = (0, https_1.onCall)({ region: "us-central1", time
             executedAtMs, adminId,
         };
     }
-    // ── Paso 2: Deduplicación forense por DNI (batched 'in') ──────────────
+    // ── Paso 2: Deduplicación forense por DNI cifrado (batched 'in') ──────────────
     const allDnis = candidates.map((r) => r.dni);
     const existingDnis = await fetchExistingDnis(allDnis);
-    const toWrite = candidates.filter((r) => !existingDnis.has(r.dni));
+    const toWrite = candidates.filter((r) => !existingDnis.has(encryptData(r.dni)));
     const duplicates = candidates.length - toWrite.length;
     const totalFailed = formatFailed + duplicates;
     // ── Paso 3: Escritura en WriteBatches de 500 ops (250 atletas/lote) ───
@@ -216,12 +272,16 @@ exports.processBulkIngestion = (0, https_1.onCall)({ region: "us-central1", time
                 status: "Inactivo",
                 photoUrl: "",
                 // Art. 26 LOPDP: Timestamp verificado en servidor, no interpolable.
-                consent_timestamp: admin.firestore.Timestamp.fromDate(new Date(`${record.consentDate}T00:00:00Z`)),
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                consent_timestamp: firestore_1.Timestamp.fromDate(new Date(`${record.consentDate}T00:00:00Z`)),
+                createdAt: firestore_1.FieldValue.serverTimestamp(),
             });
             // Subcolección /private — datos sensibles LOPDP.
             // Solo Admin SDK puede escribir aquí (allow write: if false en cliente).
-            batch.set(athleteRef.collection("private").doc("sensitive_data"), { dni: record.dni, email: record.email, phone: record.phone });
+            batch.set(athleteRef.collection("private").doc("sensitive_data"), {
+                dni: encryptData(record.dni),
+                email: encryptData(record.email),
+                phone: encryptData(record.phone)
+            });
         }
         await batch.commit();
     }
@@ -256,13 +316,12 @@ exports.processBulkIngestion = (0, https_1.onCall)({ region: "us-central1", time
 // Art. 37 LOPDP: log inalterable, timestamp de servidor, con identidad del admin.
 // =============================================================================
 exports.logSensitiveAccess = (0, https_1.onCall)({ region: "us-central1" }, async (request) => {
-    assertAdmin(request);
+    await assertAdmin(request);
     const { athleteId, action } = request.data;
     if (!athleteId || !action) {
         throw new https_1.HttpsError("invalid-argument", "athleteId y action son requeridos.");
     }
-    const token = request.auth.token;
-    const adminId = request.auth.uid;
+    const { uid: adminId, token } = resolveAuth(request);
     const adminEmail = token["email"] ?? "";
     const institutionId = token["institutionId"] ?? "";
     const timestampMs = Date.now();
@@ -297,8 +356,8 @@ exports.requestAthleteErasure = (0, https_1.onCall)({ region: "us-central1", tim
     const { uid } = request.data;
     if (!uid)
         throw new https_1.HttpsError("invalid-argument", "uid es requerido.");
-    assertAdminOrSelf(request, uid);
-    const callerId = request.auth.uid;
+    await assertAdminOrSelf(request, uid);
+    const callerId = resolveAuth(request).uid;
     const isSelfErasure = callerId === uid;
     const erasureType = isSelfErasure ? "SELF_ERASURE" : "ADMIN_ERASURE";
     // ── Paso 1: Verifica existencia y captura metadata pre-borrado ─────────
@@ -381,8 +440,8 @@ exports.syncAccessLog = (0, https_1.onCall)({ region: "us-central1" }, async (re
             locationId: log.locationId ?? "",
             clientMs: log.clientMs, // preservado para auditoría de latencia
             // El timestamp oficial es el del servidor — no manipulable desde el cliente.
-            timestamp: admin.firestore.FieldValue.serverTimestamp(),
-            syncedAt: admin.firestore.FieldValue.serverTimestamp(),
+            timestamp: firestore_1.FieldValue.serverTimestamp(),
+            syncedAt: firestore_1.FieldValue.serverTimestamp(),
         });
     }
     await batch.commit();

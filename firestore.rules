@@ -10,16 +10,20 @@ service cloud.firestore {
     // =========================================================================
 
     function isAuthenticated() {
+      // Use .get() to prevent 'undefined property' errors
       return request.auth != null
-          && request.auth.token.consent_signed == true;
+          && request.auth.token.get('consent_signed', false) == true;
     }
 
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.role == 'admin';
+      // Check the users collection since we moved away from custom claims
+      return request.auth != null 
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     function isCoach() {
-      return isAuthenticated() && request.auth.token.role == 'coach';
+      return request.auth != null 
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach';
     }
 
     function isOwner(uid) {
@@ -52,6 +56,15 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data)
                    .affectedKeys()
                    .hasOnly(allowedFields);
+    }
+
+    // =========================================================================
+    // COLECCIÓN: /users
+    // Permite a los usuarios leer su propio perfil para verificar su rol.
+    // =========================================================================
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if isAdmin();
     }
 
     // =========================================================================

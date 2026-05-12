@@ -109,22 +109,9 @@ class BulkIngestionService {
         continue;
       }
 
-      // Verificación de unicidad forense (solo lectura — Art. 10 LOPDP).
-      try {
-        final existing = await _firestore
-            .collectionGroup('sensitive_data')
-            .where('dni', isEqualTo: dni)
-            .get();
-        if (existing.docs.isNotEmpty) {
-          failed++;
-          rows.add(_errorRow(i, name, '[ERROR DUPLICIDAD] DNI "$dni" ya registrado.'));
-          continue;
-        }
-      } catch (e) {
-        failed++;
-        rows.add(_errorRow(i, name, '[ERROR DB] Verificación de duplicado fallida: $e'));
-        continue;
-      }
+      // Nota: La verificación de duplicidad por DNI se trasladó al Backend (Cloud Functions)
+      // porque ahora los DNIs están cifrados con E2EE (Master AES Key) y el cliente no puede
+      // buscarlos en texto plano. El backend se encargará de reportar los duplicados reales.
 
       success++;
       rows.add(IngestionRowResult(
