@@ -1,14 +1,15 @@
-import 'dart:ui';
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:app/utils/scanner_logic.dart';
-import 'package:app/models/athlete.dart'; // Importante: importar el modelo
+import 'package:app/models/athlete.dart';
 import '../services/offline_sync_service.dart';
+import 'referee_verify_screen.dart';
 
 enum ScanState {
   scanningAthlete,
@@ -38,6 +39,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   // El caché de simulación offline fue reemplazado por OfflineSyncService (TKT-004)
 
   ScanState _currentState = ScanState.scanningAthlete;
+
+  // Toggle Ingreso/Salida — seleccionable por el Staff antes de escanear.
+  bool _isEntry = true;
+  String get _actionLabel => _isEntry ? 'ingreso' : 'salida';
 
   // Datos temporales tras escaneo
   String? _scannedUid;
@@ -88,27 +93,82 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     await _processQR(jwtToken);
   }
 
+  bool _isSmartIdToken(String raw) {
+    final parts = raw.split('.');
+    if (parts.length != 3) return false;
+    try {
+      final padded = base64Url.normalize(parts[0]);
+      final header = json.decode(utf8.decode(base64Url.decode(padded))) as Map;
+      return header['typ'] == 'SMART_ID';
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _processQR(String jwtToken) async {
-    setState(() {
-      _isProcessing = true;
-    });
-
-    final validacion = ScannerLogic.validar(jwtToken);
-
-    if (validacion.status == ScanStatus.ilegible) {
-      _setInvalid("Código QR Ilegible o Falso");
-      return;
-    } else if (validacion.status == ScanStatus.expirado) {
-      _setInvalid("QR Expirado o Inválido");
+    // Route Smart ID tokens (JWT dot-separated) to referee verification flow.
+    if (_isSmartIdToken(jwtToken)) {
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => RefereeVerifyScreen(token: jwtToken)),
+      );
+      if (mounted) setState(() => _isProcessing = false);
       return;
     }
 
-    final String uid = validacion.uid!;
+    setState(() {
+      _isProcessing = true;
+      _currentState = ScanState.loadingAthlete;
+    });
 
-    if (_currentState == ScanState.scanningAthlete) {
+    // 1. Obtener Geofencing (Ubicación)
+    Map<String, dynamic>? locationData;
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+        Position position = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high);
+        locationData = {
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+        };
+      }
+    } catch (e) {
+      debugPrint("Geofencing Error: $e");
+    }
+
+    // 2. Validar Token en Backend (Sprint 4)
+    String resolvedUid = '';
+    try {
+      final result = await FirebaseFunctions.instanceFor(region: 'us-central1')
+          .httpsCallable('validateAttendanceToken')
+          .call({
+        'token': jwtToken,
+        'action': _actionLabel,
+        'location': locationData,
+      });
+
+      if (result.data['success'] == true) {
+        final parts = jwtToken.split(':');
+        resolvedUid = parts.length >= 3 ? parts[0] : jwtToken;
+      }
+    } catch (e) {
+      if (e is FirebaseFunctionsException) {
+        _setInvalid(e.message ?? "Token Inválido o Falso");
+      } else {
+        _setInvalid("Error de Red al Validar");
+      }
+      return;
+    }
+
+    if (_currentState == ScanState.loadingAthlete || _currentState == ScanState.scanningAthlete) {
       if (mounted) {
         setState(() {
-          _scannedUid = uid;
+          _scannedUid = resolvedUid;
           _currentState = ScanState.loadingAthlete;
         });
       }
@@ -120,10 +180,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       try {
         final doc = await (widget.firestore ?? FirebaseFirestore.instance)
             .collection('athletes')
-            .doc(uid)
+            .doc(resolvedUid)
             .get();
         if (!doc.exists) {
-          _setInvalid("Usuario ($uid) no encontrado en BD");
+          _setInvalid("Usuario ($resolvedUid) no encontrado en BD");
           return;
         }
 
@@ -146,12 +206,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             });
           }
         } else {
-          _logAccess(uid, "athlete_solo");
-          _simulateOpalAINotification(
-            uid,
-            data['fullName'] ?? 'Atleta',
-          ); // Opal AI Simulated Local Push
-          _setSuccess("Ingreso Apto");
+          // La Cloud Function ya registró el log y envió el Push (Sprint 4)
+          // Solo registramos el log offline como backup si se desea, o delegamos todo a la nube.
+          _logAccess(resolvedUid, "athlete_solo");
+          _setSuccess(_isEntry ? "Ingreso Apto" : "Salida Registrada");
         }
       } catch (e) {
         print("ERROR EN FIRESTORE: $e");
@@ -159,7 +217,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       }
     } else if (_currentState == ScanState.waitingGuardian) {
       // Asumimos que el 2do QR es del tutor autorizando.
-      _logAccess(_scannedUid!, "athlete_with_guardian_$uid");
+      _logAccess(_scannedUid!, "athlete_with_guardian_$resolvedUid");
       _setSuccess("Match Completado\nIngreso Apto");
     }
   }
@@ -261,6 +319,13 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          // ── Toggle Ingreso / Salida ──────────────────────────────
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: _buildActionToggle(),
+          ),
+        ],
       ),
       body: Stack(
         children: [
@@ -340,6 +405,58 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         return Colors.redAccent; // Error
     }
   }
+
+  /// Toggle pill para seleccionar Ingreso / Salida antes de escanear.
+  Widget _buildActionToggle() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _toggleOption('Ingreso', Icons.login, true),
+          _toggleOption('Salida', Icons.logout, false),
+        ],
+      ),
+    );
+  }
+
+  Widget _toggleOption(String label, IconData icon, bool isEntry) {
+    final selected = _isEntry == isEntry;
+    final color = isEntry
+        ? const Color(0xFF00E5FF)  // Cyan para ingreso
+        : const Color(0xFFFFAB40); // Naranja para salida
+    return GestureDetector(
+      onTap: () => setState(() => _isEntry = isEntry),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? color.withValues(alpha: 0.25) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: selected ? color : Colors.white38),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? color : Colors.white38,
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   Widget _buildDiamondModal() {
     final neonColor = _getNeonColor();

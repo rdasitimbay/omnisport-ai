@@ -12,6 +12,20 @@
  * crafted CallableRequest objects. No real Firebase connection required.
  */
 
+// ─── HMAC helper — mirrors hmacForSearch() in index.ts ───────────────────────
+// Used to build mock Firestore docs that match what fetchExistingDnis() reads.
+import * as crypto from "crypto";
+
+const _TEST_KEY = crypto.createHash("sha256")
+  .update(process.env["MASTER_AES_KEY"] ?? "omnisport-ai-super-secret-dev-key")
+  .digest();
+
+function testHmac(text: string): string {
+  return crypto.createHmac("sha256", _TEST_KEY)
+    .update(text.trim().toUpperCase())
+    .digest("hex");
+}
+
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
 interface MockToken {
@@ -69,10 +83,21 @@ const makeDocRef = () => ({
   })),
 });
 
+// Returns a user snap where role:"admin" for the canonical admin uid, "athlete" otherwise.
+// This mirrors what assertAdmin / assertAdminOrSelf read from db.collection("users").
+const mockUserDocFactory = (uid: string) => ({
+  id: uid,
+  get: jest.fn().mockResolvedValue({
+    exists: true,
+    data: () => (uid === "admin-uid-001" ? { role: "admin" } : { role: "athlete" }),
+  }),
+});
+
 const mockDbInstance = {
   batch:           jest.fn(() => mockBatch),
   collection:      jest.fn((name: string) => {
     if (name === "audit_logs") return { add: mockAuditAdd };
+    if (name === "users")      return { doc: jest.fn(mockUserDocFactory) };
     // "athletes" and any other collection
     return { doc: jest.fn(makeDocRef), add: jest.fn() };
   }),
@@ -227,9 +252,10 @@ describe("processBulkIngestion", () => {
   });
 
   it("detects duplicate DNIs and skips re-writing them", async () => {
-    // Simulate '1712345678' already in Firestore sensitive_data
+    // Simulate '1712345678' already in Firestore sensitive_data.
+    // fetchExistingDnis reads the dni_hash field — provide the HMAC, not the raw DNI.
     mockCollectionGroupGet.mockResolvedValueOnce({
-      docs: [{ data: () => ({ dni: "1712345678" }) }],
+      docs: [{ data: () => ({ dni_hash: testHmac("1712345678") }) }],
     });
 
     const result = await H(adminReq({ csv: VALID_CSV, institutionId: "inst-001" })) as Record<string, unknown>;
@@ -243,8 +269,8 @@ describe("processBulkIngestion", () => {
   it("returns zero writes when all records are duplicates — no batch commit", async () => {
     mockCollectionGroupGet.mockResolvedValue({
       docs: [
-        { data: () => ({ dni: "1712345678" }) },
-        { data: () => ({ dni: "1798765432" }) },
+        { data: () => ({ dni_hash: testHmac("1712345678") }) },
+        { data: () => ({ dni_hash: testHmac("1798765432") }) },
       ],
     });
 

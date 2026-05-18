@@ -29,6 +29,15 @@ class Athlete {
   @HiveField(7)
   final DateTime? lastMedicalReview;
 
+  @HiveField(8)
+  final String? parentUid;
+
+  @HiveField(9)
+  final String? attendanceToken;
+
+  @HiveField(10)
+  final String? emergencyContact;
+
   Athlete({
     required this.uid,
     required this.fullName,
@@ -38,6 +47,9 @@ class Athlete {
     required this.status,
     required this.representativeUid,
     this.lastMedicalReview,
+    this.parentUid,
+    this.attendanceToken,
+    this.emergencyContact,
   });
 
   factory Athlete.fromMap(String uid, Map<String, dynamic> data) {
@@ -53,6 +65,9 @@ class Athlete {
       lastMedicalReview: data['lastMedicalReview'] != null
           ? (data['lastMedicalReview'] as Timestamp).toDate()
           : null,
+      parentUid: data['parent_uid'],
+      attendanceToken: data['attendance_token'],
+      emergencyContact: data['emergency_contact'],
     );
   }
 }

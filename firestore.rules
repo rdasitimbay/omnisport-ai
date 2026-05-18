@@ -61,9 +61,20 @@ service cloud.firestore {
     // =========================================================================
     // COLECCIÓN: /users
     // Permite a los usuarios leer su propio perfil para verificar su rol.
+    // Los administradores pueden leer todos los usuarios (para RBAC).
     // =========================================================================
     match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow create: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // COLECCIÓN: /app_config
+    // Configuración global (RBAC, Templates Push, etc.)
+    // =========================================================================
+    match /app_config/{configId} {
+      allow read: if isAuthenticated() || isAdmin();
       allow write: if isAdmin();
     }
 
@@ -100,11 +111,10 @@ service cloud.firestore {
     // =========================================================================
     match /athletes/{athId} {
 
-      // Lectura: owner | admin | coach de la misma institución.
-      // Elimina el acceso abierto a cualquier usuario autenticado.
-      allow read: if isOwner(athId)
+      // Lectura: owner (incluso sin firmar consentimiento para ver pantalla de bloqueo) | admin | coach de la misma institución.
+      allow read: if (request.auth != null && request.auth.uid == athId)
                || isAdmin()
-               || (isCoach() && sameInstitution(resource.data.institutionId));
+               || (isCoach() && resource != null && sameInstitution(resource.data.institutionId));
 
       // Creación: solo admins (proceso de ingesta controlado o backoffice).
       // El cliente Flutter nunca crea registros de atletas directamente.
@@ -124,7 +134,7 @@ service cloud.firestore {
       // DNI, email, datos médicos y contacto del tutor.
       // Art. 26 LOPDP — Nivel bancario de protección para datos de menores.
       // El cliente Flutter nunca accede aquí; solo Admin SDK (Cloud Functions).
-      match /private/{docId} {
+      match /private/{document=**} {
         allow read, write: if isAdmin();
       }
 

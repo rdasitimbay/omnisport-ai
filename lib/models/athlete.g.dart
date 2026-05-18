@@ -25,13 +25,16 @@ class AthleteAdapter extends TypeAdapter<Athlete> {
       status: fields[5] as String,
       representativeUid: fields[6] as String,
       lastMedicalReview: fields[7] as DateTime?,
+      parentUid: fields[8] as String?,
+      attendanceToken: fields[9] as String?,
+      emergencyContact: fields[10] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Athlete obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.uid)
       ..writeByte(1)
@@ -47,7 +50,13 @@ class AthleteAdapter extends TypeAdapter<Athlete> {
       ..writeByte(6)
       ..write(obj.representativeUid)
       ..writeByte(7)
-      ..write(obj.lastMedicalReview);
+      ..write(obj.lastMedicalReview)
+      ..writeByte(8)
+      ..write(obj.parentUid)
+      ..writeByte(9)
+      ..write(obj.attendanceToken)
+      ..writeByte(10)
+      ..write(obj.emergencyContact);
   }
 
   @override

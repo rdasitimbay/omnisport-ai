@@ -9,6 +9,7 @@ import 'package:universal_html/html.dart' as html;
 import 'package:file_picker/file_picker.dart';
 import '../services/admin_ingestion_controller.dart';
 import '../models/ingestion_result.dart';
+import 'rbac_management_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final String institutionId;
@@ -43,10 +44,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('No autenticado.');
       
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      var doc = await docRef.get();
       
       if (!doc.exists) {
-        throw Exception('Perfil de usuario no encontrado.');
+        // Auto-heal missing profile
+        final newRole = (user.email == 'asitimbay.rommel@gmail.com' || user.email == 'admin@omnisport.ai') ? 'admin' : 'user';
+        await docRef.set({
+          'email': user.email ?? 'Sin correo',
+          'role': newRole,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        doc = await docRef.get();
       }
       
       final role = doc.data()?['role'];
@@ -372,6 +381,26 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
       extendBodyBehindAppBar: true,
+      drawer: Drawer(
+        backgroundColor: const Color(0xFF1A1A1A),
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            const DrawerHeader(
+              decoration: BoxDecoration(color: Color(0xFF0A0A0A)),
+              child: Text('OmniSport-AI Admin', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.admin_panel_settings, color: Colors.orange),
+              title: const Text('RBAC & Roles', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const RbacManagementScreen()));
+              },
+            ),
+          ],
+        ),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: Colors.orange,
         onPressed: _handleBulkUpload,
@@ -386,6 +415,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         label: Text(_isLoadingBulk ? 'Procesando...' : 'Nueva Ingesta Masiva'),
       ),
       appBar: AppBar(
+        iconTheme: const IconThemeData(color: Colors.white),
         title: const Text('OMNISPORT-AI BACKOFFICE',
             style: TextStyle(
                 color: Colors.white,
@@ -400,6 +430,37 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_fix_high, color: Colors.amberAccent),
+            tooltip: 'Seed Firestore',
+            onPressed: () async {
+              // Seeding Notification Templates
+              await FirebaseFirestore.instance.collection('app_config').doc('notification_templates').set({
+                 'Ingreso Atleta': 'El atleta {name} ha registrado su entrada.',
+                 'Salida Segura': 'El atleta {name} ha registrado su salida.',
+                 'Aviso de Emergencia': 'ALERTA: Se ha reportado una situación médica urgente.'
+              });
+
+              // FCM Ghost Device Registration
+              await FirebaseFirestore.instance.collection('users').doc('ghost_device_001').set({
+                 'email': 'fantasma@omnisport.ai',
+                 'role': 'user',
+                 'fcmToken': 'fcm_token_fantasma_xyz987',
+                 'fcmLastUpdated': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true));
+              // Seeding Athletes
+              final athletes = [
+                 {'name': 'Carlos Ruiz', 'category': 'MAYORES', 'dni_hash': '1234'},
+                 {'name': 'Ximena Cruz', 'category': 'FEMENINO', 'dni_hash': '5678'},
+                 {'name': 'Pedro Paz', 'category': 'SUB 10', 'dni_hash': '9012'},
+                 {'name': 'Juan Perez', 'category': 'SUB 18', 'dni_hash': '3456'},
+              ];
+              for (var a in athletes) {
+                 await FirebaseFirestore.instance.collection('athletes').add(a);
+              }
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Seeding exitoso: Plantillas y Atletas inyectados.')));
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white70),
             onPressed: _logout,

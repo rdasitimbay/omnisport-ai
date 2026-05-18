@@ -10,6 +10,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'screens/splash_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
+import 'screens/auth_gateway.dart';
 import 'screens/login_screen.dart';
 import 'firebase_options.dart';
 import 'services/preferences_service.dart';
@@ -23,6 +24,14 @@ final ValueNotifier<Locale> appLocaleNotifier = ValueNotifier(
   const Locale('es'),
 );
 
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  debugPrint('Notificación en background/terminada: ${message.messageId}');
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -33,10 +42,11 @@ void main() async {
 
     if (kDebugMode) {
       try {
-        final host = !kIsWeb && Platform.isAndroid ? '10.0.2.2' : '127.0.0.1';
+        final host = !kIsWeb && Platform.isAndroid ? '10.0.2.2' : 'localhost';
         FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);
         await FirebaseAuth.instance.useAuthEmulator(host, 9099);
         FirebaseFunctions.instance.useFunctionsEmulator(host, 5001);
+        FirebaseFunctions.instanceFor(region: 'us-central1').useFunctionsEmulator(host, 5001);
         debugPrint('Firebase Emulators connected (Firestore on 8080, Auth on 9099, Functions on 5001)');
       } catch (e) {
         debugPrint('Error connecting to emulators: $e');
@@ -68,20 +78,49 @@ void main() async {
 
     if (kIsWeb) {
       final redirectResult = await FirebaseAuth.instance.getRedirectResult();
-      if (redirectResult.user != null) {
+      if (redirectResult != null && redirectResult.user != null) {
         debugPrint(
           "Redirect detectado con éxito: ${redirectResult.user?.email}",
         );
+        final user = redirectResult.user!;
+        final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+        final docSnap = await docRef.get();
+        if (!docSnap.exists) {
+          // Assign admin role if it's the owner's email, otherwise user
+          final role = (user.email == 'asitimbay.rommel@gmail.com' || user.email == 'admin@omnisport.ai') ? 'admin' : 'user';
+          await docRef.set({
+            'email': user.email ?? 'Sin correo',
+            'role': role,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
       }
     }
 
     final messaging = FirebaseMessaging.instance;
     await messaging.requestPermission(alert: true, badge: true, sound: true);
 
+    try {
+      final token = await messaging.getToken();
+      final user = FirebaseAuth.instance.currentUser;
+      if (token != null && user != null) {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'fcmToken': token,
+          'fcmLastUpdated': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      debugPrint("Error obteniendo FCM token: $e");
+    }
+
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint(
         "Notificación recibida en primer plano: ${message.notification?.title}",
       );
+      // Sync Sentinel Feedback en vivo
+      OfflineSyncService.syncLogs();
     });
   } catch (e) {
     debugPrint("App init error: $e");
@@ -150,9 +189,7 @@ class OmniSportApp extends StatelessWidget {
               final user = snapshot.data;
               if (user != null) {
                 debugPrint("--- USUARIO AUTENTICADO: ${user.uid} ---");
-                return const AdminDashboardScreen(
-                  institutionId: 'inst_piloto_stresstest',
-                );
+                return const AuthGateway();
               }
               return const LoginScreen();
             },

@@ -9,6 +9,9 @@ import 'profile_screen.dart';
 import 'tablas_screen.dart';
 import 'qr_generator_screen.dart';
 import 'qr_scanner_screen.dart';
+import 'attendance_history_screen.dart';
+import 'sos_alert_screen.dart';
+import 'sport_passport_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -37,11 +40,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
         }
         if (snapshot.hasError) {
-          return const Scaffold(
+          return Scaffold(
+            backgroundColor: Colors.black,
             body: Center(
-              child: Text(
-                "Error al cargar data de athletes",
-                style: TextStyle(color: Colors.white),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Text(
+                  "Error al cargar data de athletes:\n\n${snapshot.error}",
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
               ),
             ),
           );
@@ -192,6 +200,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       _buildQuickActions(athleteDoc.id, nombre, sport),
                       const SizedBox(height: 24),
                       const Text(
+                        "Identidad Digital",
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildPassportBanner(athleteDoc.id, nombre),
+                      const SizedBox(height: 24),
+                      const Text(
                         "Staff Tools (Demo)",
                         style: TextStyle(
                           color: Colors.white70,
@@ -200,7 +219,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _buildStaffActions(),
+                      _buildStaffActions(nombre),
                       const SizedBox(height: 24),
                       const Text(
                         "Rendimiento",
@@ -403,7 +422,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildStaffActions() {
+  Widget _buildStaffActions(String nombre) {
     return Row(
       children: [
         Expanded(
@@ -424,12 +443,110 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         const SizedBox(width: 8),
         Expanded(
-          child:
-              Container(), // Spacer to visually un-stretch if needed, or add future tools
+          child: _actionCard(
+            "Historial",
+            "Asistencia",
+            CupertinoIcons.clock_fill,
+            const Color(0xFF00E5FF),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => AttendanceHistoryScreen(
+                    athleteUid: widget.currentAthleteId,
+                    athleteName: 'Atleta',
+                  ),
+                ),
+              );
+            },
+          ),
         ),
         const SizedBox(width: 8),
-        Expanded(child: Container()),
+        Expanded(
+          child: _actionCard(
+            "S.O.S",
+            "Emergencia",
+            Icons.emergency,
+            const Color(0xFFFF1744),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SosAlertScreen(
+                    athleteUid: widget.currentAthleteId,
+                    athleteName: nombre,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _buildPassportBanner(String athleteId, String nombre) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SportPassportScreen(athleteId: athleteId, athleteName: nombre),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF0D1B3E).withOpacity(0.9),
+                  const Color(0xFF0A2A5C).withOpacity(0.85),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.35), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF00E5FF).withOpacity(0.15),
+                  blurRadius: 20, spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF00E5FF).withOpacity(0.12),
+                    border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.4)),
+                  ),
+                  child: const Icon(Icons.badge_rounded, color: Color(0xFF00E5FF), size: 28),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Pasaporte Deportivo Digital',
+                          style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                      SizedBox(height: 3),
+                      Text('Credencial Smart ID · Modo Offline disponible',
+                          style: TextStyle(color: Colors.white54, fontSize: 11)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios, color: Color(0xFF00E5FF), size: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

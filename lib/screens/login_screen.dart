@@ -2,9 +2,11 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter/foundation.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../l10n/app_localizations.dart';
 import 'terms_screen.dart';
 import 'language_picker_screen.dart';
@@ -31,9 +33,13 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
+      UserCredential? userCredential;
       if (kIsWeb) {
-        GoogleAuthProvider googleProvider = GoogleAuthProvider();
-        await FirebaseAuth.instance.signInWithRedirect(googleProvider);
+        // signInWithPopup devuelve el UserCredential directamente en el mismo await.
+        // signInWithRedirect navega fuera de la app y requiere getRedirectResult()
+        // en initState para procesar el resultado — mucho más frágil en desarrollo.
+        final googleProvider = GoogleAuthProvider();
+        userCredential = await FirebaseAuth.instance.signInWithPopup(googleProvider);
       } else {
         final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
         final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
@@ -42,9 +48,10 @@ class _LoginScreenState extends State<LoginScreen> {
             accessToken: googleAuth.accessToken,
             idToken: googleAuth.idToken,
           );
-          await FirebaseAuth.instance.signInWithCredential(credential);
+          userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
         }
       }
+      if (userCredential?.user != null) await _ensureUserProfile(userCredential!.user!);
     } on FirebaseAuthException catch (e) {
       final loc = AppLocalizations.of(context);
       String message = loc.loginErrorGoogle;
@@ -60,6 +67,34 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _ensureUserProfile(User user) async {
+    final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final docSnap = await docRef.get();
+    if (!docSnap.exists) {
+      final role = (user.email == 'asitimbay.rommel@gmail.com' || user.email == 'admin@omnisport.ai') ? 'admin' : 'user';
+      await docRef.set({
+        'email': user.email ?? 'Sin correo',
+        'role': role,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Si aún no hay vínculo con un documento de atleta, intentar el auto-link.
+    // La CF linkAthleteAccount busca por email_hash en sensitive_data y guarda
+    // el athleteDocId en users/{uid} para que AuthGateway pueda enrutar correctamente.
+    final refreshed = await docRef.get();
+    if (refreshed.data()?['athleteDocId'] == null &&
+        refreshed.data()?['role'] != 'admin') {
+      try {
+        await FirebaseFunctions.instance
+            .httpsCallable('linkAthleteAccount')
+            .call();
+      } catch (e) {
+        debugPrint('linkAthleteAccount: $e');
+      }
+    }
+  }
+
   Future<void> _signInWithApple() async {
     setState(() => _isLoading = true);
     try {
@@ -67,7 +102,8 @@ class _LoginScreenState extends State<LoginScreen> {
       if (kIsWeb) {
         await FirebaseAuth.instance.signInWithRedirect(appleProvider);
       } else {
-        await FirebaseAuth.instance.signInWithProvider(appleProvider);
+        final userCredential = await FirebaseAuth.instance.signInWithProvider(appleProvider);
+        if (userCredential.user != null) await _ensureUserProfile(userCredential.user!);
       }
     } catch (e) {
       final loc = AppLocalizations.of(context);
@@ -101,15 +137,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       if (_isLogin) {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
+        final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: email,
           password: password,
         );
+        if (userCredential.user != null) await _ensureUserProfile(userCredential.user!);
       } else {
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
           email: email,
           password: password,
         );
+        if (userCredential.user != null) await _ensureUserProfile(userCredential.user!);
       }
     } on FirebaseAuthException catch (e) {
       final loc = AppLocalizations.of(context);
