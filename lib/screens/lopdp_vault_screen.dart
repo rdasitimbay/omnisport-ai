@@ -1,11 +1,11 @@
-import 'dart:io';
 import 'dart:ui';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Bóveda LOPDP — panel centralizado de derechos ARCO.
@@ -44,8 +44,9 @@ class _LopdpVaultScreenState extends State<LopdpVaultScreen> {
   late _ConsentState _salud;
   late _ConsentState _notificaciones;
 
-  bool _uploadingPhoto = false;
+  bool   _uploadingPhoto = false;
   String? _tutorPhotoUrl;
+  bool   _tutorDocIsPdf  = false; // true cuando el doc cargado es PDF
 
   @override
   void initState() {
@@ -312,44 +313,56 @@ class _LopdpVaultScreenState extends State<LopdpVaultScreen> {
     );
   }
 
-  // ── Tutor photo upload ────────────────────────────────────────────────────
+  // ── Tutor document upload (imagen JPG/PNG o PDF) ─────────────────────────
+  // Usa FilePicker + putData() para compatibilidad web y mobile.
 
   Future<void> _uploadTutorPhoto() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? localPath = prefs.getString('tutor_photo_path');
+    // Seleccionar archivo: imagen o PDF
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+      withData: true,
+    );
+    if (result == null || result.files.single.bytes == null) return;
 
-    File? photo;
-    if (localPath != null && File(localPath).existsSync()) {
-      photo = File(localPath);
-    } else {
-      final picked = await ImagePicker().pickImage(
-          source: ImageSource.gallery, imageQuality: 80);
-      if (picked == null) return;
-      photo = File(picked.path);
-    }
+    final file     = result.files.single;
+    final bytes    = file.bytes!;
+    final isPdf    = (file.extension?.toLowerCase() == 'pdf');
+    final ext      = isPdf ? 'pdf' : 'jpg';
+    final mimeType = isPdf ? 'application/pdf' : 'image/jpeg';
 
     setState(() => _uploadingPhoto = true);
     try {
       final ref = FirebaseStorage.instance.ref(
-          'tutor_docs/${widget.athleteUid}/cedula.jpg');
-      await ref.putFile(photo);
+          'tutor_docs/${widget.athleteUid}/cedula.$ext');
+      await ref.putData(bytes, SettableMetadata(contentType: mimeType));
       final url = await ref.getDownloadURL();
 
       await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.athleteUid)
-          .set({'tutorPhotoUrl': url}, SetOptions(merge: true));
+          .set({
+            'tutorPhotoUrl': url,
+            'tutorDocType':  ext,
+          }, SetOptions(merge: true));
 
-      if (mounted) setState(() => _tutorPhotoUrl = url);
-
-      // Clear local pending path
-      await prefs.remove('tutor_photo_path');
+      // Limpiar path local pendiente si existía (mobile onboarding)
+      if (!kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('tutor_photo_path');
+      }
 
       if (mounted) {
+        setState(() {
+          _tutorPhotoUrl = url;
+          _tutorDocIsPdf = isPdf;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Documento del tutor actualizado.'),
-            backgroundColor: Color(0xFF00E676),
+          SnackBar(
+            content: Text(isPdf
+                ? 'PDF de cédula registrado correctamente.'
+                : 'Fotografía de cédula registrada correctamente.'),
+            backgroundColor: const Color(0xFF00E676),
           ),
         );
       }
@@ -586,64 +599,97 @@ class _LopdpVaultScreenState extends State<LopdpVaultScreen> {
         _sectionLabel('Documento del tutor (Art. 10)', Icons.badge_rounded),
         const SizedBox(height: 10),
         _glassCard(
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Formatos aceptados
               Container(
-                width: 56,
-                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                margin: const EdgeInsets.only(bottom: 10),
                 decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(8),
-                  color: Colors.white12,
+                  border: Border.all(color: Colors.white12),
                 ),
-                child: _tutorPhotoUrl != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          _tutorPhotoUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(
-                              Icons.broken_image, color: Colors.white38),
-                        ),
-                      )
-                    : const Icon(Icons.upload_file_rounded,
-                        color: Colors.white38, size: 22),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      _tutorPhotoUrl != null
-                          ? 'Cédula del tutor registrada'
-                          : 'Sin documento registrado',
-                      style: TextStyle(
-                        color: _tutorPhotoUrl != null
-                            ? const Color(0xFF00E676)
-                            : Colors.white54,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text('Fotografía de la cédula del tutor legal',
+                    Icon(Icons.info_outline, color: Colors.white38, size: 13),
+                    SizedBox(width: 6),
+                    Text('Formatos aceptados: JPG · PNG · PDF',
                         style: TextStyle(color: Colors.white38, fontSize: 11)),
                   ],
                 ),
               ),
-              TextButton(
-                onPressed: _uploadingPhoto ? null : _uploadTutorPhoto,
-                child: _uploadingPhoto
-                    ? const SizedBox(
-                        width: 16, height: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Color(0xFF00E5FF)),
-                      )
-                    : Text(
-                        _tutorPhotoUrl != null ? 'Actualizar' : 'Subir',
-                        style: const TextStyle(
-                            color: Color(0xFF00E5FF), fontSize: 12),
-                      ),
+              Row(
+                children: [
+                  // Previsualización
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                    child: _tutorPhotoUrl != null
+                        ? (_tutorDocIsPdf || _tutorPhotoUrl!.contains('.pdf'))
+                            ? const Icon(Icons.picture_as_pdf_rounded,
+                                color: Color(0xFFFF7043), size: 30)
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.network(
+                                  _tutorPhotoUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Icon(
+                                      Icons.badge_rounded, color: Colors.white38),
+                                ),
+                              )
+                        : const Icon(Icons.upload_file_rounded,
+                            color: Colors.white38, size: 26),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _tutorPhotoUrl != null
+                              ? (_tutorDocIsPdf || _tutorPhotoUrl!.contains('.pdf'))
+                                  ? 'PDF de cédula registrado'
+                                  : 'Fotografía de cédula registrada'
+                              : 'Sin documento registrado',
+                          style: TextStyle(
+                            color: _tutorPhotoUrl != null
+                                ? const Color(0xFF00E676)
+                                : Colors.white54,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Cédula del representante legal\n(Art. 10 LOPDP)',
+                          style: TextStyle(color: Colors.white38, fontSize: 11,
+                              height: 1.4),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _uploadingPhoto ? null : _uploadTutorPhoto,
+                    child: _uploadingPhoto
+                        ? const SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Color(0xFF00E5FF)),
+                          )
+                        : Text(
+                            _tutorPhotoUrl != null ? 'Actualizar' : 'Subir',
+                            style: const TextStyle(
+                                color: Color(0xFF00E5FF), fontSize: 12),
+                          ),
+                  ),
+                ],
               ),
             ],
           ),
