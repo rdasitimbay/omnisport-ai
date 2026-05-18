@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import '../services/admin_ingestion_controller.dart';
 import '../models/ingestion_result.dart';
 import 'rbac_management_screen.dart';
+import 'crm_medico_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final String institutionId;
@@ -396,6 +397,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const RbacManagementScreen()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.medical_services_rounded, color: Color(0xFF00E676)),
+              title: const Text('CRM Médico', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Lesiones · Alta médica · Expedientes',
+                  style: TextStyle(color: Colors.white38, fontSize: 11)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CrmMedicoScreen(institutionId: widget.institutionId),
+                  ),
+                );
               },
             ),
           ],

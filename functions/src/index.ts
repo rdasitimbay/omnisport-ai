@@ -1616,7 +1616,243 @@ export const triggerSosAlert = onCall(
 );
 
 // =============================================================================
-// SECCIÓN 14: RUTINAS AUTOMÁTICAS DE LIMPIEZA — MINIMIZACIÓN Y CONSERVACIÓN
+// SECCIÓN 14: CRM MÉDICO — registerInjury + issueMedicalDischarge
+//
+// registerInjury      (admin | coach | medico):
+//   Registra una lesión, cambia estado del atleta a "Lesionado / No Apto"
+//   y bloquea automáticamente el Smart ID (isEligible = false via statusOk).
+//   Notifica a padres/tutores vía FCM.
+//
+// issueMedicalDischarge  (admin | medico):
+//   Emite el alta médica. Restaura estado a "Acceso Autorizado".
+//   Actualiza lastMedicalReview. Desbloquea Smart ID.
+//   Notifica a padres/tutores.
+//
+// Art. 9 LOPDP: datos médicos de salud — tratamiento restrictivo.
+// Art. 10 LOPDP: se requiere consentimiento consent_datosSalud.
+// =============================================================================
+
+const INJURED_STATUS   = "Lesionado / No Apto";
+const CLEARED_STATUS   = "Acceso Autorizado";
+const MEDICAL_ROLES    = new Set(["admin", "medico", "coach"]);
+const DISCHARGE_ROLES  = new Set(["admin", "medico"]);
+
+export const registerInjury = onCall(
+  { region: "us-central1", secrets: [_masterKeySecret] },
+  async (request) => {
+    assertAuthenticated(request);
+    const callerUid = resolveAuth(request).uid;
+
+    // RBAC — solo staff médico/admin/coach puede registrar lesiones.
+    const callerDoc  = await db.collection("users").doc(callerUid).get();
+    const callerRole = callerDoc.data()?.["role"] as string | undefined;
+    if (!callerRole || !MEDICAL_ROLES.has(callerRole)) {
+      throw new HttpsError("permission-denied", "Solo personal autorizado puede registrar lesiones.");
+    }
+
+    const athleteUid   = request.data["athleteUid"]   as string | undefined;
+    const injuryType   = request.data["injuryType"]   as string | undefined;
+    const description  = (request.data["description"] as string | undefined) ?? "";
+    const severity     = (request.data["severity"]    as string | undefined) ?? "yellow";
+    const bodyLocation = (request.data["bodyLocation"] as string | undefined) ?? "";
+    const documentUrl  = (request.data["documentUrl"] as string | undefined) ?? "";
+
+    if (!athleteUid || !injuryType) {
+      throw new HttpsError("invalid-argument", "athleteUid e injuryType son requeridos.");
+    }
+
+    const athleteRef  = db.collection("athletes").doc(athleteUid);
+    const athleteSnap = await athleteRef.get();
+    if (!athleteSnap.exists) {
+      throw new HttpsError("not-found", `Atleta ${athleteUid} no encontrado.`);
+    }
+
+    const athleteData  = athleteSnap.data()!;
+    const athleteName  = (athleteData["full_name"]          as string) ?? "Desconocido";
+    const institutionId = (athleteData["ownerInstitutionId"] as string) ?? "";
+
+    // ── 1. Crear registro de lesión ──────────────────────────────────────
+    const injuryRef = db
+      .collection("medical_records")
+      .doc(athleteUid)
+      .collection("injuries")
+      .doc();
+
+    const injuryData = {
+      injuryType,
+      description,
+      severity,
+      bodyLocation,
+      status:       "active",
+      reportedAt:   FieldValue.serverTimestamp(),
+      reportedBy:   callerUid,
+      institutionId,
+      athleteName,
+      documents:    documentUrl ? [documentUrl] : [],
+    };
+
+    // ── 2. Actualizar estado del atleta (bloqueo automático Smart ID) ────
+    const athleteUpdate = {
+      status:          INJURED_STATUS,
+      lastInjuryDate:  FieldValue.serverTimestamp(),
+    };
+
+    const batch = db.batch();
+    batch.set(injuryRef, injuryData);
+    batch.update(athleteRef, athleteUpdate);
+    await batch.commit();
+
+    // ── 3. Notificar a padres/tutores ────────────────────────────────────
+    let pushSent = false;
+    try {
+      const parentUid = athleteData["parentUid"] as string | undefined;
+      if (parentUid) {
+        const parentDoc = await db.collection("users").doc(parentUid).get();
+        const fcmToken  = parentDoc.data()?.["fcmToken"] as string | undefined;
+        if (fcmToken) {
+          const timeOpts: Intl.DateTimeFormatOptions = {
+            timeZone: "America/Guayaquil", hour: "2-digit", minute: "2-digit",
+          };
+          const timeStr = new Date().toLocaleTimeString("es-ES", timeOpts);
+          await admin.messaging().send({
+            token: fcmToken,
+            notification: {
+              title: `🚨 Lesión reportada: ${athleteName}`,
+              body:  `Se ha registrado una lesión (${injuryType}) a las ${timeStr}. El atleta queda en estado "No Apto" hasta recibir alta médica.`,
+            },
+            data: {
+              type:      "injury_registered",
+              injuryId:  injuryRef.id,
+              athleteUid,
+              severity,
+            },
+            android: { priority: "high" },
+            apns:    { payload: { aps: { sound: "default", badge: 1 } } },
+          });
+          pushSent = true;
+        }
+      }
+    } catch (e) {
+      console.error("Error enviando notificación de lesión:", e);
+    }
+
+    // ── 4. Audit log ─────────────────────────────────────────────────────
+    await writeAuditLog("INJURY_REGISTERED", callerUid, {
+      athleteUid, athleteName, institutionId, injuryType, severity, injuryId: injuryRef.id,
+    }, extractIp(request));
+
+    return {
+      success:  true,
+      injuryId: injuryRef.id,
+      athleteName,
+      newStatus: INJURED_STATUS,
+      pushSent,
+    };
+  }
+);
+
+export const issueMedicalDischarge = onCall(
+  { region: "us-central1", secrets: [_masterKeySecret] },
+  async (request) => {
+    assertAuthenticated(request);
+    const callerUid = resolveAuth(request).uid;
+
+    // RBAC — solo médico o admin pueden emitir alta.
+    const callerDoc  = await db.collection("users").doc(callerUid).get();
+    const callerRole = callerDoc.data()?.["role"] as string | undefined;
+    if (!callerRole || !DISCHARGE_ROLES.has(callerRole)) {
+      throw new HttpsError("permission-denied", "Solo médico o administrador puede emitir alta médica.");
+    }
+
+    const athleteUid     = request.data["athleteUid"]     as string | undefined;
+    const injuryId       = request.data["injuryId"]       as string | undefined;
+    const dischargeDocUrl = (request.data["dischargeDocUrl"] as string | undefined) ?? "";
+    const dischargeNotes  = (request.data["dischargeNotes"]  as string | undefined) ?? "";
+
+    if (!athleteUid || !injuryId) {
+      throw new HttpsError("invalid-argument", "athleteUid e injuryId son requeridos.");
+    }
+
+    const athleteRef  = db.collection("athletes").doc(athleteUid);
+    const injuryRef   = db
+      .collection("medical_records").doc(athleteUid)
+      .collection("injuries").doc(injuryId);
+
+    const [athleteSnap, injurySnap] = await Promise.all([
+      athleteRef.get(),
+      injuryRef.get(),
+    ]);
+
+    if (!athleteSnap.exists) throw new HttpsError("not-found", `Atleta ${athleteUid} no encontrado.`);
+    if (!injurySnap.exists)  throw new HttpsError("not-found", `Lesión ${injuryId} no encontrada.`);
+    if (injurySnap.data()?.["status"] === "discharged") {
+      throw new HttpsError("already-exists", "Esta lesión ya tiene alta médica registrada.");
+    }
+
+    const athleteData  = athleteSnap.data()!;
+    const athleteName  = (athleteData["full_name"]           as string) ?? "Desconocido";
+    const institutionId = (athleteData["ownerInstitutionId"] as string) ?? "";
+
+    // ── 1. Actualizar lesión + estado del atleta ─────────────────────────
+    const nowTs = FieldValue.serverTimestamp();
+    const batch = db.batch();
+
+    batch.update(injuryRef, {
+      status:         "discharged",
+      dischargedAt:   nowTs,
+      dischargedBy:   callerUid,
+      dischargeDocUrl,
+      dischargeNotes,
+    });
+    batch.update(athleteRef, {
+      status:              CLEARED_STATUS,
+      lastMedicalReview:   nowTs,
+    });
+
+    await batch.commit();
+
+    // ── 2. Notificar a padres/tutores ────────────────────────────────────
+    let pushSent = false;
+    try {
+      const parentUid = athleteData["parentUid"] as string | undefined;
+      if (parentUid) {
+        const parentDoc = await db.collection("users").doc(parentUid).get();
+        const fcmToken  = parentDoc.data()?.["fcmToken"] as string | undefined;
+        if (fcmToken) {
+          await admin.messaging().send({
+            token: fcmToken,
+            notification: {
+              title: `✅ Alta médica: ${athleteName}`,
+              body:  `${athleteName} ha recibido el alta médica y está habilitado para competir.`,
+            },
+            data: { type: "medical_discharge", athleteUid, injuryId },
+            android: { priority: "high" },
+            apns:    { payload: { aps: { sound: "default", badge: 0 } } },
+          });
+          pushSent = true;
+        }
+      }
+    } catch (e) {
+      console.error("Error enviando notificación de alta médica:", e);
+    }
+
+    // ── 3. Audit log ─────────────────────────────────────────────────────
+    await writeAuditLog("MEDICAL_DISCHARGE_ISSUED", callerUid, {
+      athleteUid, athleteName, institutionId, injuryId, dischargeDocUrl,
+    }, extractIp(request));
+
+    return {
+      success:    true,
+      injuryId,
+      athleteName,
+      newStatus: CLEARED_STATUS,
+      pushSent,
+    };
+  }
+);
+
+// =============================================================================
+// SECCIÓN 15: RUTINAS AUTOMÁTICAS DE LIMPIEZA — MINIMIZACIÓN Y CONSERVACIÓN
 //
 // Art. 9 LOPDP: principio de minimización — solo conservar datos el tiempo necesario.
 // Art. 37 LOPDP: audit_logs conservados 24 meses; luego eliminados automáticamente.
