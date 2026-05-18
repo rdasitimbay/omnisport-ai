@@ -1,8 +1,9 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/preferences_service.dart';
 import '../l10n/app_localizations.dart';
@@ -24,8 +25,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _consentPersonal     = false;
   bool _consentSalud        = false;
   bool _consentNotificaciones = false;
-  File? _tutorPhoto;
-  bool _pickingPhoto        = false;
+  Uint8List? _tutorPhotoBytes;
+  bool       _tutorDocIsPdf  = false;
+  String?    _tutorDocName;
+  bool       _pickingPhoto   = false;
 
   bool get _allConsentsAccepted =>
       _consentPersonal && _consentSalud && _consentNotificaciones;
@@ -36,12 +39,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _pickTutorPhoto() async {
     setState(() => _pickingPhoto = true);
     try {
-      final picked = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 80,
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+        withData: true,
       );
-      if (picked != null && mounted) {
-        setState(() => _tutorPhoto = File(picked.path));
+      if (result != null && result.files.single.bytes != null && mounted) {
+        final file = result.files.single;
+        setState(() {
+          _tutorPhotoBytes = file.bytes;
+          _tutorDocIsPdf   = (file.extension?.toLowerCase() == 'pdf');
+          _tutorDocName    = file.name;
+        });
       }
     } finally {
       if (mounted) setState(() => _pickingPhoto = false);
@@ -57,8 +66,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await prefs.setBool('consent_datosSalud', _consentSalud);
     await prefs.setBool('consent_notificaciones', _consentNotificaciones);
     await prefs.setInt('consent_grantedAtMs', nowMs);
-    if (_tutorPhoto != null) {
-      await prefs.setString('tutor_photo_path', _tutorPhoto!.path);
+    // El documento del tutor se sube desde la Bóveda LOPDP post-autenticación.
+    // En mobile, guardamos la ruta temporal solo si dart:io está disponible.
+    if (!kIsWeb && _tutorPhotoBytes != null) {
+      await prefs.setBool('tutor_doc_pending', true);
     }
 
     await PreferencesService().setHasSeenOnboarding(true);
@@ -405,39 +416,53 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           color: Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: _tutorPhoto != null
+            color: _tutorPhotoBytes != null
                 ? const Color(0xFF00E676).withValues(alpha: 0.5)
                 : Colors.white.withValues(alpha: 0.15),
             style: BorderStyle.solid,
             width: 1.2,
           ),
         ),
-        child: _tutorPhoto != null
+        child: _tutorPhotoBytes != null
             ? Row(
                 children: [
+                  // Previsualización: imagen o icono PDF
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.file(_tutorPhoto!,
-                        width: 56, height: 40, fit: BoxFit.cover),
+                    child: _tutorDocIsPdf
+                        ? Container(
+                            width: 56, height: 40,
+                            color: Colors.white.withValues(alpha: 0.08),
+                            child: const Icon(Icons.picture_as_pdf_rounded,
+                                color: Color(0xFFFF7043), size: 24),
+                          )
+                        : Image.memory(_tutorPhotoBytes!,
+                            width: 56, height: 40, fit: BoxFit.cover),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Documento cargado',
+                        const Text('Documento seleccionado',
                             style: TextStyle(
                                 color: Color(0xFF00E676),
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600)),
-                        Text('Se subirá al completar el registro',
-                            style: TextStyle(color: Colors.white38, fontSize: 10)),
+                        Text(
+                          _tutorDocName ?? 'Se subirá al completar el registro',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white38, fontSize: 10),
+                        ),
                       ],
                     ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white38, size: 18),
-                    onPressed: () => setState(() => _tutorPhoto = null),
+                    onPressed: () => setState(() {
+                      _tutorPhotoBytes = null;
+                      _tutorDocName    = null;
+                    }),
                   ),
                 ],
               )
@@ -448,7 +473,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       color: Colors.white38, size: 20),
                   const SizedBox(width: 8),
                   Text(
-                    _pickingPhoto ? 'Seleccionando…' : 'Subir foto cédula tutor',
+                    _pickingPhoto ? 'Seleccionando…' : 'Subir cédula tutor (JPG · PNG · PDF)',
                     style: const TextStyle(
                         color: Colors.white54,
                         fontSize: 12,
