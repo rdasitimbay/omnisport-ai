@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.triggerSosAlert = exports.linkAthleteAccount = exports.verifySmartId = exports.generateSmartId = exports.broadcastEmergencyPush = exports.validateAttendanceToken = exports.generateAttendanceToken = exports.syncAccessLog = exports.requestAthleteErasure = exports.logSensitiveAccess = exports.processBulkIngestion = void 0;
+exports.scheduledLopdpMaintenance = exports.scheduledPurgeUsedTokens = exports.triggerSosAlert = exports.linkAthleteAccount = exports.verifySmartId = exports.generateSmartId = exports.broadcastEmergencyPush = exports.validateAttendanceToken = exports.generateAttendanceToken = exports.syncAccessLog = exports.requestAthleteErasure = exports.logSensitiveAccess = exports.processBulkIngestion = void 0;
 exports.hmacForSearch = hmacForSearch;
 exports.encryptData = encryptData;
 exports.decryptData = decryptData;
@@ -41,6 +41,7 @@ const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-admin/firestore");
 const crypto = __importStar(require("crypto"));
 const https_1 = require("firebase-functions/v2/https");
+const scheduler_1 = require("firebase-functions/v2/scheduler");
 const params_1 = require("firebase-functions/params");
 // =============================================================================
 // SECCIÓN 0-A: EMULATOR BRIDGE
@@ -279,15 +280,31 @@ async function fetchExistingDnis(dnis) {
     return existingHashes;
 }
 /**
+ * Extrae la IP del cliente de un CallableRequest v2.
+ * Cloud Run coloca la IP real en x-forwarded-for cuando el cliente llega
+ * a través del load balancer de Google; .ip es el balanceador mismo.
+ */
+function extractIp(request) {
+    const raw = request.rawRequest;
+    const forwarded = raw?.headers?.["x-forwarded-for"];
+    if (forwarded) {
+        const first = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+        return first.split(",")[0].trim();
+    }
+    return raw?.ip ?? "unknown";
+}
+/**
  * Escribe en audit_logs con Admin SDK (bypasea allow write: if false de las reglas).
  * Retorna el document ID para incluirlo en respuestas Hive como comprobante legal.
  * Art. 37 LOPDP: timestamps generados en servidor, inmutables desde el cliente.
+ * sourceIp: dirección IP del solicitante para trazabilidad forense (Art. 37).
  */
-async function writeAuditLog(action, performedBy, metadata) {
+async function writeAuditLog(action, performedBy, metadata, sourceIp) {
     const ref = await db.collection("audit_logs").add({
         action,
         performedBy,
         ...metadata,
+        sourceIp: sourceIp ?? null,
         timestamp: firestore_1.FieldValue.serverTimestamp(),
     });
     return ref.id;
@@ -315,7 +332,7 @@ exports.processBulkIngestion = (0, https_1.onCall)({ region: "us-central1", time
     if (candidates.length === 0) {
         await writeAuditLog("BULK_INGESTION_NO_VALID_RECORDS", adminId, {
             institutionId, total: formatFailed, valid: 0, failed: formatFailed,
-        });
+        }, extractIp(request));
         return {
             institutionId, total: formatFailed, valid: 0,
             failed: formatFailed, duplicates: 0, batchCount: 0,
@@ -371,7 +388,7 @@ exports.processBulkIngestion = (0, https_1.onCall)({ region: "us-central1", time
         failed: totalFailed,
         duplicates,
         batchCount,
-    });
+    }, extractIp(request));
     // ── Respuesta Hive-nativa (@HiveType typeId: 10) ───────────────────────
     return {
         institutionId,
@@ -406,7 +423,7 @@ exports.logSensitiveAccess = (0, https_1.onCall)({ region: "us-central1", secret
     // Escribe en audit_logs y obtiene el document ID como comprobante legal.
     const logId = await writeAuditLog(action, adminId, {
         athleteId, adminEmail, institutionId,
-    });
+    }, extractIp(request));
     // ── Respuesta Hive-nativa (@HiveType typeId: 11) ───────────────────────
     // Flutter cachea esta entrada en Hive para auditoría offline y reporte LOPDP.
     return {
@@ -449,7 +466,7 @@ exports.requestAthleteErasure = (0, https_1.onCall)({ region: "us-central1", tim
     // ── Paso 2: Audit log INICIADO — antes de borrar (Art. 37 LOPDP) ──────
     await writeAuditLog(`${erasureType}_INITIATED`, callerId, {
         targetUid: uid, athleteName, institutionId,
-    });
+    }, extractIp(request));
     // ── Paso 3: Borrado recursivo — raíz + todas las subcolecciones ────────
     // recursiveDelete() maneja /private, /sport_details, /historial_entrenamientos.
     await db.recursiveDelete(athleteRef);
@@ -471,7 +488,7 @@ exports.requestAthleteErasure = (0, https_1.onCall)({ region: "us-central1", tim
     const completedAtMs = Date.now();
     const receiptId = await writeAuditLog(`${erasureType}_COMPLETED`, callerId, {
         targetUid: uid, institutionId, completedAtMs,
-    });
+    }, extractIp(request));
     // ── Respuesta Hive-nativa (@HiveType typeId: 12) ───────────────────────
     // Este comprobante persiste en Hive incluso después de que el perfil
     // haya sido borrado de Firestore — evidencia legal del Derecho al Olvido.
@@ -856,7 +873,7 @@ exports.broadcastEmergencyPush = (0, https_1.onCall)({ region: "us-central1", ti
         if (tokens.length === 0) {
             await writeAuditLog("EMERGENCY_BROADCAST_NO_RECIPIENTS", callerUid, {
                 title, message, institutionId, sentAtMs: now,
-            });
+            }, extractIp(request));
             return {
                 sent: 0, failed: 0, recipients: 0,
                 warning: "No hay representantes con FCM token válido registrado.",
@@ -883,7 +900,7 @@ exports.broadcastEmergencyPush = (0, https_1.onCall)({ region: "us-central1", ti
             totalSent, totalFailed,
             recipientCount: tokens.length,
             sentAtMs: now,
-        });
+        }, extractIp(request));
         return { sent: totalSent, failed: totalFailed, recipients: tokens.length };
     }
     catch (e) {
@@ -937,7 +954,7 @@ exports.generateSmartId = (0, https_1.onCall)({ region: "us-central1", secrets: 
         smartIdGeneratedAt: firestore_1.FieldValue.serverTimestamp(),
         smartIdValidUntilMs: exp * 1000,
     });
-    await writeAuditLog("SMART_ID_GENERATED", callerUid, { athleteUid: targetUid, smartIdNum, isEligible });
+    await writeAuditLog("SMART_ID_GENERATED", callerUid, { athleteUid: targetUid, smartIdNum, isEligible }, extractIp(request));
     return { token, smartIdNum, isEligible, medicalOk, paymentOk, expMs: exp * 1000 };
 });
 exports.verifySmartId = (0, https_1.onCall)({ region: "us-central1", secrets: [_masterKeySecret] }, async (request) => {
@@ -968,7 +985,7 @@ exports.verifySmartId = (0, https_1.onCall)({ region: "us-central1", secrets: [_
     }
     await writeAuditLog("SMART_ID_VERIFIED", resolveAuth(request).uid, {
         smartIdNum: payload.smartIdNum, athleteUid: payload.uid, isEligible: payload.isEligible,
-    });
+    }, extractIp(request));
     // fullName omitido deliberadamente — vista árbitro (LOPDP Art. 5 minimización).
     return {
         isEligible: payload.isEligible,
@@ -1257,5 +1274,86 @@ exports.triggerSosAlert = (0, https_1.onCall)({ region: "us-central1", timeoutSe
             callEmergency: protocol.callEmergency,
         },
     };
+});
+// =============================================================================
+// SECCIÓN 14: RUTINAS AUTOMÁTICAS DE LIMPIEZA — MINIMIZACIÓN Y CONSERVACIÓN
+//
+// Art. 9 LOPDP: principio de minimización — solo conservar datos el tiempo necesario.
+// Art. 37 LOPDP: audit_logs conservados 24 meses; luego eliminados automáticamente.
+//
+// scheduledPurgeUsedTokens : diario — elimina used_tokens con más de 2 horas.
+//   Los tokens solo necesitan durar TOKEN_TTL_MS (45s) + margen; retener más
+//   es innecesario y ocupa Firestore sin valor.
+//
+// scheduledLopdpMaintenance : mensual (día 1, 03:00 America/Guayaquil) —
+//   • Elimina audit_logs con más de 24 meses.
+//   • Anonimiza attendance_logs con más de 12 meses (scannedBy → "ANONYMIZED",
+//     location → null): conserva la estadística de asistencia sin identificar al
+//     personal que escaneó.
+// =============================================================================
+exports.scheduledPurgeUsedTokens = (0, scheduler_1.onSchedule)({
+    schedule: "every 24 hours",
+    timeZone: "America/Guayaquil",
+    region: "us-central1",
+}, async () => {
+    const cutoff = firestore_1.Timestamp.fromMillis(Date.now() - 2 * 3600000); // 2 hours ago
+    const snap = await db.collection("used_tokens")
+        .where("usedAt", "<", cutoff)
+        .limit(500)
+        .get();
+    if (snap.empty)
+        return;
+    const batch = db.batch();
+    snap.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    console.log(`[purgeUsedTokens] Eliminados ${snap.size} tokens expirados.`);
+});
+exports.scheduledLopdpMaintenance = (0, scheduler_1.onSchedule)({
+    schedule: "0 3 1 * *", // 03:00 el día 1 de cada mes
+    timeZone: "America/Guayaquil",
+    region: "us-central1",
+}, async () => {
+    const now = Date.now();
+    // ── 1. Eliminar audit_logs con más de 24 meses ────────────────────────
+    const auditCutoff = firestore_1.Timestamp.fromMillis(now - 24 * 30 * 24 * 3600000);
+    const oldLogs = await db.collection("audit_logs")
+        .where("timestamp", "<", auditCutoff)
+        .limit(500)
+        .get();
+    if (!oldLogs.empty) {
+        const auditBatch = db.batch();
+        oldLogs.docs.forEach((d) => auditBatch.delete(d.ref));
+        await auditBatch.commit();
+        console.log(`[lopdpMaintenance] audit_logs eliminados: ${oldLogs.size}`);
+    }
+    // ── 2. Anonimizar attendance_logs con más de 12 meses ─────────────────
+    // Conserva el registro estadístico (quién asistió, cuándo) pero elimina
+    // la identidad del operador que escaneó y la ubicación GPS.
+    const attendanceCutoff = firestore_1.Timestamp.fromMillis(now - 12 * 30 * 24 * 3600000);
+    const oldAttendance = await db.collection("attendance_logs")
+        .where("timestamp", "<", attendanceCutoff)
+        .where("scannedBy", "!=", "ANONYMIZED")
+        .limit(500)
+        .get();
+    if (!oldAttendance.empty) {
+        const attBatch = db.batch();
+        oldAttendance.docs.forEach((d) => attBatch.update(d.ref, { scannedBy: "ANONYMIZED", location: null }));
+        await attBatch.commit();
+        console.log(`[lopdpMaintenance] attendance_logs anonimizados: ${oldAttendance.size}`);
+    }
+    // ── 3. Eliminar arco_requests resueltos con más de 6 meses ───────────
+    const arcoCutoff = firestore_1.Timestamp.fromMillis(now - 6 * 30 * 24 * 3600000);
+    const oldArco = await db.collection("arco_requests")
+        .where("requestedAt", "<", arcoCutoff)
+        .where("status", "==", "resolved")
+        .limit(500)
+        .get();
+    if (!oldArco.empty) {
+        const arcoBatch = db.batch();
+        oldArco.docs.forEach((d) => arcoBatch.delete(d.ref));
+        await arcoBatch.commit();
+        console.log(`[lopdpMaintenance] arco_requests resueltos eliminados: ${oldArco.size}`);
+    }
+    console.log("[lopdpMaintenance] Mantenimiento mensual LOPDP completado.");
 });
 //# sourceMappingURL=index.js.map

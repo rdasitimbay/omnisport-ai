@@ -1,11 +1,12 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/preferences_service.dart';
 import '../l10n/app_localizations.dart';
 import 'auth_gateway.dart';
-import 'login_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -17,13 +18,52 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
+  static const int _totalPages = 4;
+
+  // Consent state (page 3)
+  bool _consentPersonal     = false;
+  bool _consentSalud        = false;
+  bool _consentNotificaciones = false;
+  File? _tutorPhoto;
+  bool _pickingPhoto        = false;
+
+  bool get _allConsentsAccepted =>
+      _consentPersonal && _consentSalud && _consentNotificaciones;
+
+  bool get _canProceed =>
+      _currentPage < (_totalPages - 1) || _allConsentsAccepted;
+
+  Future<void> _pickTutorPhoto() async {
+    setState(() => _pickingPhoto = true);
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+      );
+      if (picked != null && mounted) {
+        setState(() => _tutorPhoto = File(picked.path));
+      }
+    } finally {
+      if (mounted) setState(() => _pickingPhoto = false);
+    }
+  }
 
   Future<void> _completeOnboarding() async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final prefs = await SharedPreferences.getInstance();
+
+    // Persist consent timestamps — synced to Firestore post-auth from LopdpVaultScreen.
+    await prefs.setBool('consent_datosPersonales', _consentPersonal);
+    await prefs.setBool('consent_datosSalud', _consentSalud);
+    await prefs.setBool('consent_notificaciones', _consentNotificaciones);
+    await prefs.setInt('consent_grantedAtMs', nowMs);
+    if (_tutorPhoto != null) {
+      await prefs.setString('tutor_photo_path', _tutorPhoto!.path);
+    }
+
     await PreferencesService().setHasSeenOnboarding(true);
-    
+
     if (!mounted) return;
-    
-    // Al completar, delegar a AuthGateway para manejar la sesión final
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => const AuthGateway()),
@@ -31,9 +71,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _nextPage() {
-    if (_currentPage < 2) {
-      _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
-    } else {
+    if (_currentPage < _totalPages - 1) {
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    } else if (_allConsentsAccepted) {
       _completeOnboarding();
     }
   }
@@ -41,17 +84,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     final loc = AppLocalizations.of(context);
-    
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          TextButton(
-            onPressed: _completeOnboarding,
-            child: Text(loc.skip, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
-          )
+          if (_currentPage < _totalPages - 1)
+            TextButton(
+              onPressed: _completeOnboarding,
+              child: Text(
+                loc.skip,
+                style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+              ),
+            ),
         ],
       ),
       body: Container(
@@ -68,56 +115,59 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               Expanded(
                 child: PageView(
                   controller: _pageController,
-                  onPageChanged: (index) => setState(() => _currentPage = index),
+                  physics: _currentPage == _totalPages - 1
+                      ? const NeverScrollableScrollPhysics()
+                      : const BouncingScrollPhysics(),
+                  onPageChanged: (i) => setState(() => _currentPage = i),
                   children: [
-                    // Slide 1
-                    _buildSlide(
+                    _buildInfoSlide(
                       icon: CupertinoIcons.person,
                       title: loc.onboardingSlide1Title,
                       description: loc.onboardingSlide1Desc,
                     ),
-                    // Slide 2
-                    _buildSlide(
-                      icon: CupertinoIcons.sparkles, // Representa IA
+                    _buildInfoSlide(
+                      icon: CupertinoIcons.sparkles,
                       title: loc.onboardingSlide2Title,
                       description: loc.onboardingSlide2Desc,
                     ),
-                    // Slide 3
-                    _buildSlide(
-                      icon: CupertinoIcons.lock_shield, // Representa Legal / Seguridad
+                    _buildInfoSlide(
+                      icon: CupertinoIcons.lock_shield,
                       title: loc.onboardingSlide3Title,
                       description: loc.onboardingSlide3Desc,
                     ),
+                    _buildConsentSlide(),
                   ],
                 ),
               ),
-              
-              // Paginador
+              // Progress dots
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(3, (index) => _buildDot(index: index)),
+                children: List.generate(_totalPages, (i) => _buildDot(index: i)),
               ),
-              
               const SizedBox(height: 32),
-              
-              // Botón Inferior
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _nextPage,
+                    onPressed: _canProceed ? _nextPage : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: const Color(0xFF003F87),
+                      disabledBackgroundColor: Colors.white24,
+                      disabledForegroundColor: Colors.white38,
                       padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
                       elevation: 5,
                       shadowColor: Colors.black45,
                     ),
                     child: Text(
-                      _currentPage == 2 ? loc.start : loc.next,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      _currentPage == _totalPages - 1
+                          ? 'Aceptar y Empezar'
+                          : loc.next,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
@@ -129,27 +179,32 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _buildSlide({required IconData icon, required String title, required String description}) {
+  // ── Slide informativo genérico ────────────────────────────────────────────
+
+  Widget _buildInfoSlide({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32.0),
+        padding: const EdgeInsets.symmetric(horizontal: 32),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(32), // Geometría Squircle / Suave
+          borderRadius: BorderRadius.circular(32),
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
             child: Container(
-              padding: const EdgeInsets.all(40.0),
+              padding: const EdgeInsets.all(40),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
+                color: Colors.white.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(32),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.2), // Borde reflectivo 20%
+                  color: Colors.white.withValues(alpha: 0.2),
                   width: 1.5,
                 ),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(icon, size: 80, color: Colors.white),
                   const SizedBox(height: 32),
@@ -157,8 +212,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     title,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontSize: 24, 
-                      fontWeight: FontWeight.bold, 
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                       color: Colors.white,
                       height: 1.2,
                     ),
@@ -168,8 +223,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     description,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontSize: 15, 
-                      color: Colors.white70, 
+                      fontSize: 15,
+                      color: Colors.white70,
                       height: 1.5,
                     ),
                   ),
@@ -182,6 +237,229 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
+  // ── Slide 4 — Consentimiento LOPDP ───────────────────────────────────────
+
+  Widget _buildConsentSlide() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.2),
+                width: 1.5,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.shield_rounded,
+                    color: Color(0xFF00E5FF), size: 40),
+                const SizedBox(height: 12),
+                const Text(
+                  'Consentimiento LOPDP',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Necesitamos tu autorización para los siguientes tratamientos de datos (Art. 10 LOPDP Ecuador). Puedes revocarlos desde la Bóveda LOPDP en cualquier momento.',
+                  style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.5),
+                ),
+                const SizedBox(height: 20),
+
+                _buildConsentCheckbox(
+                  icon: CupertinoIcons.person_crop_circle_fill,
+                  title: 'Datos personales y deportivos',
+                  description:
+                      'Nombre, fotografía, categoría deportiva y membresía de club.',
+                  value: _consentPersonal,
+                  onChanged: (v) => setState(() => _consentPersonal = v ?? false),
+                ),
+                const SizedBox(height: 12),
+
+                _buildConsentCheckbox(
+                  icon: Icons.favorite_rounded,
+                  title: 'Datos de salud y médicos',
+                  description:
+                      'Estado de aptitud médica y certificaciones de entrenamiento.',
+                  value: _consentSalud,
+                  onChanged: (v) => setState(() => _consentSalud = v ?? false),
+                ),
+                const SizedBox(height: 12),
+
+                _buildConsentCheckbox(
+                  icon: Icons.notifications_rounded,
+                  title: 'Notificaciones al tutor',
+                  description:
+                      'Alertas de entrada/salida y notificaciones de emergencia.',
+                  value: _consentNotificaciones,
+                  onChanged: (v) =>
+                      setState(() => _consentNotificaciones = v ?? false),
+                ),
+
+                const SizedBox(height: 20),
+                const Divider(color: Colors.white24),
+                const SizedBox(height: 16),
+
+                // Photo upload — opcional
+                const Text(
+                  'Documento del tutor (opcional)',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Fotografía de la cédula del tutor legal para acreditar la autorización.',
+                  style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
+                ),
+                const SizedBox(height: 12),
+                _buildPhotoUploadArea(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConsentCheckbox({
+    required IconData icon,
+    required String title,
+    required String description,
+    required bool value,
+    required ValueChanged<bool?> onChanged,
+  }) {
+    return InkWell(
+      onTap: () => onChanged(!value),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: value
+              ? const Color(0xFF00E5FF).withValues(alpha: 0.1)
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: value
+                ? const Color(0xFF00E5FF).withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.15),
+            width: 1.2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon,
+                color: value ? const Color(0xFF00E5FF) : Colors.white38,
+                size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                        color: value ? Colors.white : Colors.white70,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      )),
+                  const SizedBox(height: 3),
+                  Text(description,
+                      style: const TextStyle(
+                          color: Colors.white38, fontSize: 11, height: 1.4)),
+                ],
+              ),
+            ),
+            Checkbox(
+              value: value,
+              onChanged: onChanged,
+              activeColor: const Color(0xFF00E5FF),
+              checkColor: const Color(0xFF001F3F),
+              side: const BorderSide(color: Colors.white38),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhotoUploadArea() {
+    return GestureDetector(
+      onTap: _pickingPhoto ? null : _pickTutorPhoto,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _tutorPhoto != null
+                ? const Color(0xFF00E676).withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.15),
+            style: BorderStyle.solid,
+            width: 1.2,
+          ),
+        ),
+        child: _tutorPhoto != null
+            ? Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(_tutorPhoto!,
+                        width: 56, height: 40, fit: BoxFit.cover),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Documento cargado',
+                            style: TextStyle(
+                                color: Color(0xFF00E676),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
+                        Text('Se subirá al completar el registro',
+                            style: TextStyle(color: Colors.white38, fontSize: 10)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white38, size: 18),
+                    onPressed: () => setState(() => _tutorPhoto = null),
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.upload_file_rounded,
+                      color: Colors.white38, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    _pickingPhoto ? 'Seleccionando…' : 'Subir foto cédula tutor',
+                    style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
   Widget _buildDot({required int index}) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -189,7 +467,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       height: 8,
       width: _currentPage == index ? 24 : 8,
       decoration: BoxDecoration(
-        color: _currentPage == index ? Colors.white : Colors.white.withOpacity(0.4),
+        color: _currentPage == index
+            ? Colors.white
+            : Colors.white.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(4),
       ),
     );

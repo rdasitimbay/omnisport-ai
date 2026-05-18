@@ -12,6 +12,7 @@ import 'qr_scanner_screen.dart';
 import 'attendance_history_screen.dart';
 import 'sos_alert_screen.dart';
 import 'sport_passport_screen.dart';
+import 'lopdp_vault_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -209,6 +210,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       const SizedBox(height: 16),
                       _buildPassportBanner(athleteDoc.id, nombre),
+                      const SizedBox(height: 24),
+                      const Text(
+                        "Privacidad",
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildLopdpVaultBanner(athleteDoc.id, nombre),
                       const SizedBox(height: 24),
                       const Text(
                         "Staff Tools (Demo)",
@@ -542,6 +554,82 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const Icon(Icons.arrow_forward_ios, color: Color(0xFF00E5FF), size: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLopdpVaultBanner(String athleteId, String nombre) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => LopdpVaultScreen(
+            athleteUid: athleteId,
+            athleteName: nombre,
+          ),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF1A0A3E).withOpacity(0.9),
+                  const Color(0xFF2A0A5C).withOpacity(0.85),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: Colors.purpleAccent.withOpacity(0.35), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.purpleAccent.withOpacity(0.12),
+                  blurRadius: 20, spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.purpleAccent.withOpacity(0.12),
+                    border: Border.all(
+                        color: Colors.purpleAccent.withOpacity(0.4)),
+                  ),
+                  child: const Icon(Icons.shield_rounded,
+                      color: Colors.purpleAccent, size: 28),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Bóveda LOPDP',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold)),
+                      SizedBox(height: 3),
+                      Text('Consentimientos · Derechos ARCO · Privacidad',
+                          style: TextStyle(
+                              color: Colors.white54, fontSize: 11)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios,
+                    color: Colors.purpleAccent, size: 16),
               ],
             ),
           ),
