@@ -606,14 +606,14 @@ class _RegisterInjuryTabState extends State<_RegisterInjuryTab> {
   bool    _uploadingDoc        = false;
 
   static const _injuryTypes = [
-    ('contusion',              'Contusión / Golpe'),
-    ('esguince',               'Esguince / Torcedura'),
-    ('fractura_sospecha',      'Sospecha de Fractura'),
-    ('golpe_cabeza',           'Golpe en la Cabeza'),
-    ('dificultad_respiratoria','Dificultad Respiratoria'),
-    ('herida_abierta',         'Herida Abierta'),
-    ('desmayo',                'Síncope / Desmayo'),
-    ('otro',                   'Otro'),
+    ('contusion',               'Contusión',          Icons.sports_kabaddi),
+    ('esguince',                'Esguince',           Icons.accessibility_new),
+    ('fractura_sospecha',       'Fractura',           Icons.broken_image_outlined),
+    ('golpe_cabeza',            'Golpe cráneo',       Icons.psychology_outlined),
+    ('dificultad_respiratoria', 'Resp. difícil',      Icons.air),
+    ('herida_abierta',          'Herida abierta',     Icons.medical_services_outlined),
+    ('desmayo',                 'Síncope',            Icons.personal_injury_outlined),
+    ('otro',                    'Otro',               Icons.more_horiz),
   ];
 
   static const _severities = [
@@ -849,37 +849,39 @@ class _RegisterInjuryTabState extends State<_RegisterInjuryTab> {
   }
 
   Widget _buildInjuryTypeGrid() {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: 3,
-      children: _injuryTypes.map(((String, String) item) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: _injuryTypes.map(((String, String, IconData) item) {
         final selected = _injuryType == item.$1;
+        final accent   = const Color(0xFFFF1744);
         return GestureDetector(
           onTap: () => setState(() => _injuryType = item.$1),
-          child: Container(
-            alignment: Alignment.center,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
               color: selected
-                  ? const Color(0xFFFF1744).withValues(alpha: 0.2)
+                  ? accent.withValues(alpha: 0.18)
                   : Colors.white.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: selected
-                    ? const Color(0xFFFF1744)
-                    : Colors.white.withValues(alpha: 0.12),
+                color: selected ? accent : Colors.white.withValues(alpha: 0.14),
+                width: selected ? 1.5 : 1,
               ),
             ),
-            child: Text(item.$2,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: selected ? Colors.white : Colors.white54,
-                  fontSize: 11,
-                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-                )),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(item.$3,
+                  size: 14,
+                  color: selected ? accent : Colors.white38),
+              const SizedBox(width: 5),
+              Text(item.$2,
+                  style: TextStyle(
+                    color:      selected ? Colors.white : Colors.white54,
+                    fontSize:   12,
+                    fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                  )),
+            ]),
           ),
         );
       }).toList(),
