@@ -8,8 +8,10 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../l10n/app_localizations.dart';
+import '../services/preferences_service.dart';
 import 'terms_screen.dart';
 import 'language_picker_screen.dart';
+import 'onboarding_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -196,6 +198,21 @@ class _LoginScreenState extends State<LoginScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          // Botón debug-only: reinicia onboarding para pruebas
+          if (kDebugMode)
+            IconButton(
+              icon: const Icon(CupertinoIcons.arrow_counterclockwise, color: Colors.white54, size: 22),
+              tooltip: 'Reiniciar onboarding (debug)',
+              onPressed: () async {
+                final prefs = PreferencesService();
+                await prefs.setHasSeenOnboarding(false);
+                if (!context.mounted) return;
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+                );
+              },
+            ),
           IconButton(
             icon: const Icon(CupertinoIcons.globe, color: Colors.white, size: 28),
             onPressed: () {

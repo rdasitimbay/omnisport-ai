@@ -12,6 +12,8 @@ import 'screens/splash_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/auth_gateway.dart';
 import 'screens/login_screen.dart';
+import 'screens/language_picker_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'firebase_options.dart';
 import 'services/preferences_service.dart';
 import 'services/secure_hive_service.dart';
@@ -191,6 +193,14 @@ class OmniSportApp extends StatelessWidget {
               if (user != null) {
                 debugPrint("--- USUARIO AUTENTICADO: ${user.uid} ---");
                 return const AuthGateway();
+              }
+              // Usuario no autenticado: respetar flujo de onboarding
+              final prefs = PreferencesService();
+              if (prefs.preferredLanguage == null) {
+                return const LanguagePickerScreen();
+              }
+              if (!prefs.hasSeenOnboarding) {
+                return const OnboardingScreen();
               }
               return const LoginScreen();
             },
