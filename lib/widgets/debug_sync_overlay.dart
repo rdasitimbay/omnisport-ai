@@ -23,8 +23,7 @@ class _DebugSyncOverlayState extends State<DebugSyncOverlay> {
         color: Colors.transparent,
         child: GestureDetector(
           onTap: () => setState(() => _expanded = !_expanded),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+          child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.75),
