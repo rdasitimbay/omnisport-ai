@@ -1,10 +1,10 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 
 /// CRM Médico — panel para el cuerpo médico / administrador.
 ///
@@ -357,7 +357,7 @@ class _MedicalDischargeSheet extends StatefulWidget {
 
 class _MedicalDischargeSheetState extends State<_MedicalDischargeSheet> {
   final _notesCtrl = TextEditingController();
-  File? _docFile;
+  Uint8List? _docBytes;
   bool  _uploading = false;
   bool  _submitting = false;
 
@@ -368,20 +368,23 @@ class _MedicalDischargeSheetState extends State<_MedicalDischargeSheet> {
   }
 
   Future<void> _pickDoc() async {
-    final picked = await ImagePicker().pickImage(
-        source: ImageSource.gallery, imageQuality: 85);
-    if (picked != null && mounted) {
-      setState(() => _docFile = File(picked.path));
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+      withData: true,
+    );
+    if (result != null && result.files.single.bytes != null && mounted) {
+      setState(() => _docBytes = result.files.single.bytes);
     }
   }
 
   Future<String?> _uploadDoc() async {
-    if (_docFile == null) return null;
+    if (_docBytes == null) return null;
     setState(() => _uploading = true);
     try {
       final ref = FirebaseStorage.instance.ref(
           'medical_docs/${widget.athleteUid}/${widget.injuryId}_discharge_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await ref.putFile(_docFile!);
+      await ref.putData(_docBytes!, SettableMetadata(contentType: 'image/jpeg'));
       return await ref.getDownloadURL();
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -478,12 +481,12 @@ class _MedicalDischargeSheetState extends State<_MedicalDischargeSheet> {
                 padding: const EdgeInsets.symmetric(
                     vertical: 14, horizontal: 16),
                 decoration: BoxDecoration(
-                  color: _docFile != null
+                  color: _docBytes != null
                       ? const Color(0xFF00E676).withValues(alpha: 0.1)
                       : Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: _docFile != null
+                    color: _docBytes != null
                         ? const Color(0xFF00E676).withValues(alpha: 0.5)
                         : Colors.white.withValues(alpha: 0.15),
                   ),
@@ -491,10 +494,10 @@ class _MedicalDischargeSheetState extends State<_MedicalDischargeSheet> {
                 child: Row(
                   children: [
                     Icon(
-                      _docFile != null
+                      _docBytes != null
                           ? Icons.check_circle_rounded
                           : Icons.upload_file_rounded,
-                      color: _docFile != null
+                      color: _docBytes != null
                           ? const Color(0xFF00E676)
                           : Colors.white38,
                       size: 20,
@@ -502,11 +505,11 @@ class _MedicalDischargeSheetState extends State<_MedicalDischargeSheet> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        _docFile != null
+                        _docBytes != null
                             ? 'Documento de alta adjunto'
                             : 'Adjuntar documento de alta (foto/radiografía)',
                         style: TextStyle(
-                          color: _docFile != null
+                          color: _docBytes != null
                               ? const Color(0xFF00E676)
                               : Colors.white54,
                           fontSize: 13,
@@ -601,7 +604,7 @@ class _RegisterInjuryTabState extends State<_RegisterInjuryTab> {
   String  _severity            = 'yellow';
   String  _bodyLocation        = '';
   final   _descCtrl            = TextEditingController();
-  File?   _docFile;
+  Uint8List? _docBytes;
   bool    _submitting          = false;
   bool    _uploadingDoc        = false;
 
@@ -629,20 +632,23 @@ class _RegisterInjuryTabState extends State<_RegisterInjuryTab> {
   }
 
   Future<void> _pickDoc() async {
-    final picked = await ImagePicker().pickImage(
-        source: ImageSource.gallery, imageQuality: 85);
-    if (picked != null && mounted) {
-      setState(() => _docFile = File(picked.path));
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+      withData: true,
+    );
+    if (result != null && result.files.single.bytes != null && mounted) {
+      setState(() => _docBytes = result.files.single.bytes);
     }
   }
 
   Future<String?> _uploadDoc(String athleteUid) async {
-    if (_docFile == null) return null;
+    if (_docBytes == null) return null;
     setState(() => _uploadingDoc = true);
     try {
       final ref = FirebaseStorage.instance.ref(
           'medical_docs/$athleteUid/injury_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await ref.putFile(_docFile!);
+      await ref.putData(_docBytes!, SettableMetadata(contentType: 'image/jpeg'));
       return await ref.getDownloadURL();
     } finally {
       if (mounted) setState(() => _uploadingDoc = false);
@@ -687,7 +693,7 @@ class _RegisterInjuryTabState extends State<_RegisterInjuryTab> {
           _injuryType          = 'contusion';
           _severity            = 'yellow';
           _bodyLocation        = '';
-          _docFile             = null;
+          _docBytes            = null;
         });
         _descCtrl.clear();
       }
@@ -935,32 +941,32 @@ class _RegisterInjuryTabState extends State<_RegisterInjuryTab> {
     return GestureDetector(
       onTap: _uploadingDoc ? null : _pickDoc,
       child: _glassContainer(
-        borderColor: _docFile != null
+        borderColor: _docBytes != null
             ? const Color(0xFF00E5FF).withValues(alpha: 0.4)
             : null,
         child: Row(
           children: [
             Icon(
-              _docFile != null ? Icons.check_circle_rounded : Icons.add_photo_alternate_rounded,
-              color: _docFile != null ? const Color(0xFF00E5FF) : Colors.white38,
+              _docBytes != null ? Icons.check_circle_rounded : Icons.add_photo_alternate_rounded,
+              color: _docBytes != null ? const Color(0xFF00E5FF) : Colors.white38,
               size: 20,
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                _docFile != null
+                _docBytes != null
                     ? 'Documento adjunto ✓'
                     : 'Foto/radiografía (imagen)',
                 style: TextStyle(
-                  color: _docFile != null ? const Color(0xFF00E5FF) : Colors.white38,
+                  color: _docBytes != null ? const Color(0xFF00E5FF) : Colors.white38,
                   fontSize: 13,
                 ),
               ),
             ),
-            if (_docFile != null)
+            if (_docBytes != null)
               IconButton(
                 icon: const Icon(Icons.close, color: Colors.white38, size: 18),
-                onPressed: () => setState(() => _docFile = null),
+                onPressed: () => setState(() => _docBytes = null),
               ),
           ],
         ),
