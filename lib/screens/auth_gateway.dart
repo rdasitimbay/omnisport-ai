@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_screen.dart';
 import 'dashboard_screen.dart';
 import 'admin_dashboard_screen.dart';
+import 'parent_dashboard_screen.dart';
 
 class AuthGateway extends StatelessWidget {
   const AuthGateway({super.key});
@@ -56,6 +57,9 @@ class AuthGateway extends StatelessWidget {
 
                     if (role == 'admin' && kIsWeb) {
                       return const AdminDashboardScreen(institutionId: 'inst_piloto_stresstest');
+                    }
+                    if (role == 'parent') {
+                      return ParentDashboardScreen(parentUid: snapshot.data!.uid);
                     }
                   }
 

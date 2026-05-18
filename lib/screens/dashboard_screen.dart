@@ -13,6 +13,7 @@ import 'attendance_history_screen.dart';
 import 'sos_alert_screen.dart';
 import 'sport_passport_screen.dart';
 import 'lopdp_vault_screen.dart';
+import 'session_attendance_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -222,6 +223,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(height: 16),
                       _buildLopdpVaultBanner(athleteDoc.id, nombre),
                       const SizedBox(height: 24),
+                      _buildSessionAttendanceBanner(user?.uid),
                       const Text(
                         "Staff Tools (Demo)",
                         style: TextStyle(
@@ -635,6 +637,91 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  // Visible solo para coach y admin — carga el rol del usuario desde Firestore.
+  Widget _buildSessionAttendanceBanner(String? uid) {
+    if (uid == null) return const SizedBox.shrink();
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('users').doc(uid).get(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final data = snap.data!.data() as Map<String, dynamic>?;
+        final role          = data?['role']          as String?;
+        final institutionId = data?['institutionId'] as String?;
+        final coachName     = data?['displayName']   as String? ?? 'Coach';
+        if (role != 'coach' && role != 'admin') return const SizedBox.shrink();
+        final instId = institutionId ?? 'inst_piloto_stresstest';
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Panel de Sesión',
+                  style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold,
+                      fontSize: 18)),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SessionAttendanceScreen(
+                      institutionId: instId,
+                      coachName:     coachName,
+                    ),
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft, end: Alignment.bottomRight,
+                          colors: [
+                            const Color(0xFF00E5FF).withOpacity(0.12),
+                            Colors.amber.withOpacity(0.08),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: const Color(0xFF00E5FF).withOpacity(0.35), width: 1.2),
+                      ),
+                      child: Row(children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFF00E5FF).withOpacity(0.15),
+                          ),
+                          child: const Icon(Icons.fact_check_rounded,
+                              color: Color(0xFF00E5FF), size: 28),
+                        ),
+                        const SizedBox(width: 16),
+                        const Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text('Panel de Asistencia en Vivo',
+                                style: TextStyle(color: Colors.white, fontSize: 15,
+                                    fontWeight: FontWeight.bold)),
+                            SizedBox(height: 3),
+                            Text('Presentes · Ausentes · Marcado manual',
+                                style: TextStyle(color: Colors.white54, fontSize: 11)),
+                          ]),
+                        ),
+                        const Icon(Icons.arrow_forward_ios,
+                            color: Color(0xFF00E5FF), size: 16),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

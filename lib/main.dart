@@ -40,7 +40,8 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    if (kDebugMode) {
+    const useEmulator = bool.fromEnvironment('USE_EMULATOR', defaultValue: false);
+    if (kDebugMode && useEmulator) {
       try {
         final host = !kIsWeb && Platform.isAndroid ? '10.0.2.2' : 'localhost';
         FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);

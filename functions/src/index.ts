@@ -1636,6 +1636,34 @@ const INJURED_STATUS   = "Lesionado / No Apto";
 const CLEARED_STATUS   = "Acceso Autorizado";
 const MEDICAL_ROLES    = new Set(["admin", "medico", "coach"]);
 const DISCHARGE_ROLES  = new Set(["admin", "medico"]);
+const FIREBASE_STORAGE_URL_PREFIX = "https://firebasestorage.googleapis.com/";
+
+function isFirebaseStorageUrl(url: string): boolean {
+  return !url || url.startsWith(FIREBASE_STORAGE_URL_PREFIX) || url.startsWith("gs://");
+}
+
+async function hasHealthConsent(athleteUid: string, athleteData: FirebaseFirestore.DocumentData): Promise<boolean> {
+  const directConsents = athleteData["consents"] as Record<string, unknown> | undefined;
+  const directHealth = directConsents?.["datosSalud"] as Record<string, unknown> | undefined;
+  if (directHealth?.["granted"] === true || athleteData["consent_datosSalud"] === true) {
+    return true;
+  }
+
+  const linkedUser = await db.collection("users")
+    .where("athleteDocId", "==", athleteUid)
+    .limit(1)
+    .get();
+
+  if (!linkedUser.empty) {
+    const data = linkedUser.docs[0].data();
+    const consents = data["consents"] as Record<string, unknown> | undefined;
+    const health = consents?.["datosSalud"] as Record<string, unknown> | undefined;
+    if (health?.["granted"] === true) return true;
+  }
+
+  // Legacy migration path: bulk-ingestion consent_date existed before granular consents.
+  return athleteData["consent_timestamp"] != null;
+}
 
 export const registerInjury = onCall(
   { region: "us-central1", secrets: [_masterKeySecret] },
@@ -1670,6 +1698,17 @@ export const registerInjury = onCall(
     const athleteData  = athleteSnap.data()!;
     const athleteName  = (athleteData["full_name"]          as string) ?? "Desconocido";
     const institutionId = (athleteData["ownerInstitutionId"] as string) ?? "";
+
+    if (!isFirebaseStorageUrl(documentUrl)) {
+      throw new HttpsError("invalid-argument", "documentUrl debe pertenecer a Firebase Storage.");
+    }
+
+    if (!(await hasHealthConsent(athleteUid, athleteData))) {
+      throw new HttpsError(
+        "failed-precondition",
+        "No existe consentimiento vigente para tratamiento de datos de salud."
+      );
+    }
 
     // ── 1. Crear registro de lesión ──────────────────────────────────────
     const injuryRef = db
@@ -1787,6 +1826,10 @@ export const issueMedicalDischarge = onCall(
     if (!injurySnap.exists)  throw new HttpsError("not-found", `Lesión ${injuryId} no encontrada.`);
     if (injurySnap.data()?.["status"] === "discharged") {
       throw new HttpsError("already-exists", "Esta lesión ya tiene alta médica registrada.");
+    }
+
+    if (!isFirebaseStorageUrl(dischargeDocUrl)) {
+      throw new HttpsError("invalid-argument", "dischargeDocUrl debe pertenecer a Firebase Storage.");
     }
 
     const athleteData  = athleteSnap.data()!;
@@ -1952,3 +1995,98 @@ export const scheduledLopdpMaintenance = onSchedule(
   }
 );
 
+// ────────────────────────────────────────────────────────────────────────────
+// §16 — REPORTE DE ASISTENCIA
+//   Agrega attendance_logs por institución y rango de fechas.
+//   Devuelve stats por atleta: sesiones asistidas, total, porcentaje.
+//   Roles permitidos: admin, coach.
+// ────────────────────────────────────────────────────────────────────────────
+export const getAttendanceReport = onCall(
+  { region: "us-central1", enforceAppCheck: false },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "Debes iniciar sesión.");
+    }
+    const callerUid = request.auth.uid;
+    const callerDoc = await db.collection("users").doc(callerUid).get();
+    const callerRole = callerDoc.data()?.["role"] as string | undefined;
+    if (callerRole !== "admin" && callerRole !== "coach") {
+      throw new HttpsError("permission-denied", "Acceso restringido a admin y coach.");
+    }
+
+    const institutionId = request.data.institutionId as string | undefined;
+    const startMs       = request.data.startMs       as number | undefined;
+    const endMs         = request.data.endMs         as number | undefined;
+    const category      = request.data.category      as string | undefined;
+
+    if (!institutionId || typeof startMs !== "number" || typeof endMs !== "number") {
+      throw new HttpsError("invalid-argument", "Requeridos: institutionId, startMs, endMs.");
+    }
+    if (endMs <= startMs) {
+      throw new HttpsError("invalid-argument", "endMs debe ser mayor que startMs.");
+    }
+
+    // ── 1. Atletas de la institución ──────────────────────────────────────
+    let athleteQuery: FirebaseFirestore.Query = db.collection("athletes")
+      .where("ownerInstitutionId", "==", institutionId);
+    if (category) {
+      athleteQuery = athleteQuery.where("teamOrCategory", "==", category);
+    }
+    const athleteSnaps = await athleteQuery.get();
+
+    // ── 2. Logs en el rango de fechas ────────────────────────────────────
+    const start = Timestamp.fromMillis(startMs);
+    const end   = Timestamp.fromMillis(endMs);
+    const logSnaps = await db.collection("attendance_logs")
+      .where("timestamp", ">=", start)
+      .where("timestamp", "<=", end)
+      .get();
+
+    // ── 3. Contar ingresos por atleta y detectar días con actividad ───────
+    const ingresosByAthlete = new Map<string, number>();
+    const sessionDates      = new Set<string>();
+
+    for (const logDoc of logSnaps.docs) {
+      const data   = logDoc.data();
+      const uid    = data["athleteUid"] as string | undefined;
+      const action = data["action"]     as string | undefined;
+      const ts     = data["timestamp"]  as Timestamp | undefined;
+      if (!uid || action !== "ingreso") continue;
+      ingresosByAthlete.set(uid, (ingresosByAthlete.get(uid) ?? 0) + 1);
+      if (ts) {
+        const localDate = ts.toDate().toLocaleDateString("es-EC", { timeZone: "America/Guayaquil" });
+        sessionDates.add(localDate);
+      }
+    }
+    const totalSessions = sessionDates.size || 1; // evita división entre 0
+
+    // ── 4. Construir reporte por atleta ───────────────────────────────────
+    const report = athleteSnaps.docs.map((doc) => {
+      const data             = doc.data();
+      const uid              = doc.id;
+      const sessionsAttended = ingresosByAthlete.get(uid) ?? 0;
+      const percentage       = Math.round((sessionsAttended / totalSessions) * 100);
+      return {
+        athleteUid:        uid,
+        fullName:          (data["full_name"]        as string) ?? "Sin nombre",
+        category:          (data["teamOrCategory"]   as string) ?? "Sin categoría",
+        status:            (data["status"]           as string) ?? "Acceso Autorizado",
+        isMinor:           (data["isMinor"]          as boolean) ?? false,
+        sessionsAttended,
+        totalSessions,
+        percentage:        Math.min(percentage, 100),
+      };
+    });
+
+    report.sort((a, b) => b.percentage - a.percentage);
+
+    await writeAuditLog(
+      "getAttendanceReport",
+      callerUid,
+      { institutionId, startMs, endMs, category: category ?? null, athleteCount: report.length },
+      extractIp(request)
+    );
+
+    return { report, totalSessions: sessionDates.size, startMs, endMs, institutionId };
+  }
+);

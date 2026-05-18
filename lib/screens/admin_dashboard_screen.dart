@@ -11,6 +11,8 @@ import '../services/admin_ingestion_controller.dart';
 import '../models/ingestion_result.dart';
 import 'rbac_management_screen.dart';
 import 'crm_medico_screen.dart';
+import 'attendance_report_screen.dart';
+import 'session_attendance_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final String institutionId;
@@ -410,6 +412,42 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => CrmMedicoScreen(institutionId: widget.institutionId),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.bar_chart_rounded, color: Color(0xFF00E5FF)),
+              title: const Text('Reporte de Asistencia',
+                  style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Control · Estadísticas · Exportar CSV',
+                  style: TextStyle(color: Colors.white38, fontSize: 11)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AttendanceReportScreen(
+                        institutionId: widget.institutionId),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.fact_check_rounded, color: Colors.amber),
+              title: const Text('Panel de Sesión',
+                  style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Presentes · Ausentes · Marcado manual',
+                  style: TextStyle(color: Colors.white38, fontSize: 11)),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SessionAttendanceScreen(
+                      institutionId: widget.institutionId,
+                      coachName:     'Admin',
+                    ),
                   ),
                 );
               },
