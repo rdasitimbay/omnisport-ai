@@ -38,7 +38,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator(color: Colors.white)),
+            backgroundColor: Color(0xFF001F3F),
+            body: Center(child: CircularProgressIndicator(color: Color(0xFF00E5FF))),
           );
         }
         if (snapshot.hasError) {
@@ -647,7 +648,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       future: FirebaseFirestore.instance.collection('users').doc(uid).get(),
       builder: (context, snap) {
         if (!snap.hasData) return const SizedBox.shrink();
-        final data = snap.data!.data() as Map<String, dynamic>?;
+        // iOS fix: Firestore puede retornar Map<Object?, Object?> en lugar de
+        // Map<String, dynamic>. Usamos Map.from() para conversión segura.
+        final rawData = snap.data!.data();
+        final data = rawData != null
+            ? Map<String, dynamic>.from(rawData as Map)
+            : null;
         final role          = data?['role']          as String?;
         final institutionId = data?['institutionId'] as String?;
         final coachName     = data?['displayName']   as String? ?? 'Coach';

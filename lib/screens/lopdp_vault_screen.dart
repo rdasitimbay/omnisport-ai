@@ -48,6 +48,9 @@ class _LopdpVaultScreenState extends State<LopdpVaultScreen> {
   String? _tutorPhotoUrl;
   bool   _tutorDocIsPdf  = false; // true cuando el doc cargado es PDF
 
+  String get _authUid =>
+      FirebaseAuth.instance.currentUser?.uid ?? widget.athleteUid;
+
   @override
   void initState() {
     super.initState();
@@ -62,7 +65,7 @@ class _LopdpVaultScreenState extends State<LopdpVaultScreen> {
   Future<void> _loadConsents() async {
     setState(() { _loading = true; _errorMsg = null; });
     try {
-      final uid = widget.athleteUid;
+      final uid = _authUid;
       final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
       final data = doc.data() ?? {};
       final consents = (data['consents'] as Map<String, dynamic>?) ?? {};
@@ -118,7 +121,7 @@ class _LopdpVaultScreenState extends State<LopdpVaultScreen> {
   // ── Persist ───────────────────────────────────────────────────────────────
 
   Future<void> _persistConsents() async {
-    final uid = widget.athleteUid;
+    final uid = _authUid;
     await FirebaseFirestore.instance.collection('users').doc(uid).set({
       'consents': {
         'datosPersonales': {
@@ -174,9 +177,10 @@ class _LopdpVaultScreenState extends State<LopdpVaultScreen> {
       onConfirm: () async {
         // Write an ARCO access request to Firestore — backend can pick it up.
         await FirebaseFirestore.instance.collection('arco_requests').add({
-          'uid':       widget.athleteUid,
-          'type':      'ACCESS',
-          'status':    'pending',
+          'uid':         _authUid,
+          'athleteUid':  widget.athleteUid,
+          'type':        'ACCESS',
+          'status':      'pending',
           'requestedAt': FieldValue.serverTimestamp(),
         });
         if (mounted) {
@@ -215,7 +219,7 @@ class _LopdpVaultScreenState extends State<LopdpVaultScreen> {
       isDestructive: true,
       onConfirm: () async {
         try {
-          await FirebaseFunctions.instanceFor(region: 'us-central1')
+          await FirebaseFunctions.instance
               .httpsCallable('requestAthleteErasure')
               .call({'uid': widget.athleteUid});
 
@@ -247,9 +251,10 @@ class _LopdpVaultScreenState extends State<LopdpVaultScreen> {
       confirmLabel: 'Presentar oposición',
       onConfirm: () async {
         await FirebaseFirestore.instance.collection('arco_requests').add({
-          'uid':       widget.athleteUid,
-          'type':      'OPPOSITION',
-          'status':    'pending',
+          'uid':         _authUid,
+          'athleteUid':  widget.athleteUid,
+          'type':        'OPPOSITION',
+          'status':      'pending',
           'requestedAt': FieldValue.serverTimestamp(),
         });
         if (mounted) {
@@ -340,7 +345,7 @@ class _LopdpVaultScreenState extends State<LopdpVaultScreen> {
 
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(widget.athleteUid)
+          .doc(_authUid)
           .set({
             'tutorPhotoUrl': url,
             'tutorDocType':  ext,
@@ -366,10 +371,24 @@ class _LopdpVaultScreenState extends State<LopdpVaultScreen> {
           ),
         );
       }
+    } on FirebaseException catch (e) {
+      if (mounted) {
+        final msg = e.code == 'unauthorized' || e.code == 'permission-denied'
+            ? 'Sin permiso para subir documentos. Contacta al administrador.'
+            : e.code == 'object-not-found'
+                ? 'Documento no encontrado. Intenta de nuevo.'
+                : 'Error al subir: ${e.message ?? e.code}';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.redAccent),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+          SnackBar(
+            content: const Text('Error al subir el documento. Verifica tu conexión.'),
+            backgroundColor: Colors.redAccent,
+          ),
         );
       }
     } finally {
@@ -581,7 +600,7 @@ class _LopdpVaultScreenState extends State<LopdpVaultScreen> {
           Switch.adaptive(
             value: active,
             onChanged: _saving ? null : onToggle,
-            activeColor: const Color(0xFF00E5FF),
+            activeThumbColor: const Color(0xFF00E5FF),
             inactiveThumbColor: Colors.white38,
             inactiveTrackColor: Colors.white12,
           ),
@@ -640,7 +659,7 @@ class _LopdpVaultScreenState extends State<LopdpVaultScreen> {
                                 child: Image.network(
                                   _tutorPhotoUrl!,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const Icon(
+                                  errorBuilder: (context, error, stackTrace) => const Icon(
                                       Icons.badge_rounded, color: Colors.white38),
                                 ),
                               )

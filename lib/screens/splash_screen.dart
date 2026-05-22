@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../services/preferences_service.dart';
 import 'language_picker_screen.dart';
 import 'onboarding_screen.dart';

@@ -23,7 +23,8 @@ class _DebugSyncOverlayState extends State<DebugSyncOverlay> {
         color: Colors.transparent,
         child: GestureDetector(
           onTap: () => setState(() => _expanded = !_expanded),
-          child: Container(
+          child: IntrinsicWidth(
+            child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.75),
@@ -78,7 +79,7 @@ class _DebugSyncOverlayState extends State<DebugSyncOverlay> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(children: [
-                      const Text('🛠️ Sync Sentinel',
+                      const Text('>> Sync Sentinel',
                           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold,
                               fontSize: 11)),
                       const Spacer(),
@@ -87,10 +88,13 @@ class _DebugSyncOverlayState extends State<DebugSyncOverlay> {
                     const SizedBox(height: 6),
                     Text('Pending Records: $pendingCount',
                         style: const TextStyle(color: Colors.cyanAccent, fontSize: 10)),
-                    Text('AES Key Loaded: ${isKeyLoaded ? "✅" : "❌"}',
-                        style: TextStyle(
-                            color: isKeyLoaded ? Colors.greenAccent : Colors.redAccent,
-                            fontSize: 10)),
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Text('AES Key: ',
+                          style: TextStyle(color: Colors.white54, fontSize: 10)),
+                      Icon(isKeyLoaded ? Icons.check_circle : Icons.cancel,
+                          color: isKeyLoaded ? Colors.greenAccent : Colors.redAccent,
+                          size: 11),
+                    ]),
                     const SizedBox(height: 2),
                     Text('Last Response: ${OfflineSyncService.lastSyncResponse}',
                         style: const TextStyle(color: Colors.white54, fontSize: 9),
@@ -131,6 +135,7 @@ class _DebugSyncOverlayState extends State<DebugSyncOverlay> {
                 );
               },
             ),
+          ),
           ),
         ),
       ),

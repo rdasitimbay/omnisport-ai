@@ -24,18 +24,23 @@ class _SecureQRViewState extends State<SecureQRView> {
   Stream<String> _generateTokenStream() async* {
     while (true) {
       try {
-        final result = await FirebaseFunctions.instanceFor(region: 'us-central1')
+        final result = await FirebaseFunctions.instance
             .httpsCallable('generateAttendanceToken')
             .call({'athleteUid': widget.athleteUid});
-        
-        yield result.data['token'] as String;
+
+        final token = result.data is Map
+            ? result.data['token'] as String?
+            : null;
+        if (token != null && token.isNotEmpty) {
+          yield token;
+        } else {
+          yield 'ERROR:token_empty';
+        }
       } catch (e) {
         debugPrint('Error generating attendance token: $e');
-        // En caso de error (ej. sin red), podemos ceder un estado de error
-        // o simplemente esperar al siguiente ciclo.
-        // No enviamos un token inválido para no comprometer el flujo.
+        final msg = e.toString();
+        yield 'ERROR:${msg.length > 40 ? msg.substring(0, 40) : msg}';
       }
-      // Esperar 45 segundos antes de generar el siguiente token
       await Future.delayed(const Duration(seconds: 45));
     }
   }
@@ -55,15 +60,39 @@ class _SecureQRViewState extends State<SecureQRView> {
 
         if (snapshot.hasError || !snapshot.hasData) {
           return const Center(
-            child: Text(
-              'Error de red.\nReintentando...', 
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.redAccent),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.wifi_off, color: Colors.orangeAccent, size: 40),
+                SizedBox(height: 12),
+                Text(
+                  'Sin conexión.\nReintentando en 45s…',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.orangeAccent, fontSize: 13),
+                ),
+              ],
             ),
           );
         }
 
         final token = snapshot.data!;
+
+        if (token.startsWith('ERROR:')) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.cloud_off, color: Colors.orangeAccent, size: 40),
+                const SizedBox(height: 12),
+                const Text(
+                  'Servicio temporalmente no disponible.\nReintentando en 45s…',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.orangeAccent, fontSize: 13),
+                ),
+              ],
+            ),
+          );
+        }
 
         return Column(
           mainAxisSize: MainAxisSize.min,

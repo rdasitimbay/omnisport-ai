@@ -1,26 +1,6 @@
 {
   "indexes": [
     {
-      "collectionGroup": "sensitive_data",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "dni_hash",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "sensitive_data",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "email_hash",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "attendance_logs",
       "queryScope": "COLLECTION",
       "fields": [

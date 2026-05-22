@@ -26,21 +26,42 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach';
     }
 
+    function isMedico() {
+      return request.auth != null
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'medico';
+    }
+
+    function isParent() {
+      return request.auth != null
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'parent';
+    }
+
     function isOwner(uid) {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
     // Art. 5 LOPDP — Minimización: valida relación legítima entre el usuario
     // y la institución del recurso usando el claim institutionId del token.
+    function requesterInstitution() {
+      return request.auth != null
+          ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+              .get('institutionId', request.auth.token.get('institutionId', ''))
+          : '';
+    }
+
     function sameInstitution(resourceInstitutionId) {
-      return request.auth.token.institutionId == resourceInstitutionId;
+      return requesterInstitution() == resourceInstitutionId;
+    }
+
+    function documentInstitution(data) {
+      return data.get('ownerInstitutionId', data.get('institutionId', ''));
     }
 
     // Resuelve la institutionId del documento padre del atleta para validar
     // acceso cruzado de coaches a subcolecciones (sport_details, historial).
     // Art. 5 LOPDP — Minimización: coach solo accede a atletas de su institución.
     function athleteInstitution(athId) {
-      return get(/databases/$(database)/documents/athletes/$(athId)).data.institutionId;
+      return documentInstitution(get(/databases/$(database)/documents/athletes/$(athId)).data);
     }
 
     // =========================================================================
@@ -58,6 +79,30 @@ service cloud.firestore {
                    .hasOnly(allowedFields);
     }
 
+    function isValidUserSelfCreate(userId) {
+      return request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly([
+            'email', 'role', 'createdAt', 'displayName', 'photoUrl'
+          ])
+          && request.resource.data.role in ['user', 'athlete', 'parent'];
+    }
+
+    function isValidUserSelfUpdate(userId) {
+      return request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.diff(resource.data)
+              .affectedKeys()
+              .hasOnly([
+                'consents',
+                'tutorPhotoUrl',
+                'tutorDocType',
+                'tutorIdPhotoUrl',
+                'tutorIdUploadedAt',
+                'updatedAt'
+              ]);
+    }
+
     // =========================================================================
     // COLECCIÓN: /users
     // Permite a los usuarios leer su propio perfil para verificar su rol.
@@ -65,8 +110,9 @@ service cloud.firestore {
     // =========================================================================
     match /users/{userId} {
       allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
-      allow create: if request.auth != null && (request.auth.uid == userId || isAdmin());
-      allow update, delete: if isAdmin();
+      allow create: if isAdmin() || isValidUserSelfCreate(userId);
+      allow update: if isAdmin() || isValidUserSelfUpdate(userId);
+      allow delete: if isAdmin();
     }
 
     // =========================================================================
@@ -74,7 +120,10 @@ service cloud.firestore {
     // Configuración global (RBAC, Templates Push, etc.)
     // =========================================================================
     match /app_config/{configId} {
-      allow read: if isAuthenticated() || isAdmin();
+      // Cualquier usuario autenticado puede leer la configuración global.
+      // No requiere consent_signed — un usuario recién registrado necesita
+      // leer maintenance_mode antes de que se complete el flujo de consentimiento.
+      allow read: if request.auth != null;
       allow write: if isAdmin();
     }
 
@@ -114,7 +163,7 @@ service cloud.firestore {
       // Lectura: owner (incluso sin firmar consentimiento para ver pantalla de bloqueo) | admin | coach de la misma institución.
       allow read: if (request.auth != null && request.auth.uid == athId)
                || isAdmin()
-               || (isCoach() && resource != null && sameInstitution(resource.data.institutionId));
+               || (isCoach() && resource != null && sameInstitution(documentInstitution(resource.data)));
 
       // Creación: solo admins (proceso de ingesta controlado o backoffice).
       // El cliente Flutter nunca crea registros de atletas directamente.
@@ -181,6 +230,51 @@ service cloud.firestore {
     match /audit_logs/{auditId} {
       allow read:  if isAdmin();
       allow write: if false;
+    }
+
+    // =========================================================================
+    // COLECCIÓN: /attendance_logs
+    // Registros de asistencia: ingreso/salida por QR o marcado manual (coach).
+    // CF validateAttendanceToken escribe vía Admin SDK (bypass reglas).
+    // _markManual en session_attendance_screen escribe directamente (coach/admin).
+    // Padres pueden leer para ver asistencia de sus hijos (parent_dashboard).
+    // =========================================================================
+    match /attendance_logs/{logId} {
+      allow read:   if isAdmin()
+                 || isCoach()
+                 || isParent();
+      allow create: if isAdmin() || isCoach();
+      allow update, delete: if isAdmin();
+    }
+
+    // =========================================================================
+    // COLECCIÓN: /medical_records
+    // Art. 9 y 10 LOPDP — Datos de salud: lectura restringida al equipo médico,
+    // admin o coach de la misma institución. Escritura solo vía Cloud Functions.
+    // =========================================================================
+    match /medical_records/{athId}/injuries/{injuryId} {
+      allow read: if isAdmin()
+               || (isMedico() && sameInstitution(athleteInstitution(athId)))
+               || (isCoach() && sameInstitution(athleteInstitution(athId)));
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // COLECCIÓN: /arco_requests
+    // Art. 16 LOPDP — Derechos ARCO. El usuario crea y lee sus solicitudes;
+    // resolución y eliminación solo por administración autorizada.
+    // =========================================================================
+    match /arco_requests/{requestId} {
+      allow create: if request.auth != null
+                 && request.auth.uid == request.resource.data.uid
+                 && request.resource.data.keys().hasOnly([
+                   'uid', 'athleteUid', 'type', 'status', 'requestedAt'
+                 ])
+                 && request.resource.data.status == 'pending'
+                 && request.resource.data.type in ['ACCESS', 'OPPOSITION'];
+      allow read: if request.auth != null
+               && (request.auth.uid == resource.data.uid || isAdmin());
+      allow update, delete: if isAdmin();
     }
   }
 }

@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.scheduledLopdpMaintenance = exports.scheduledPurgeUsedTokens = exports.triggerSosAlert = exports.linkAthleteAccount = exports.verifySmartId = exports.generateSmartId = exports.broadcastEmergencyPush = exports.validateAttendanceToken = exports.generateAttendanceToken = exports.syncAccessLog = exports.requestAthleteErasure = exports.logSensitiveAccess = exports.processBulkIngestion = void 0;
+exports.getAttendanceReport = exports.scheduledLopdpMaintenance = exports.scheduledPurgeUsedTokens = exports.issueMedicalDischarge = exports.registerInjury = exports.triggerSosAlert = exports.linkAthleteAccount = exports.verifySmartId = exports.generateSmartId = exports.broadcastEmergencyPush = exports.validateAttendanceToken = exports.generateAttendanceToken = exports.syncAccessLog = exports.requestAthleteErasure = exports.logSensitiveAccess = exports.processBulkIngestion = void 0;
 exports.hmacForSearch = hmacForSearch;
 exports.encryptData = encryptData;
 exports.decryptData = decryptData;
@@ -1276,7 +1276,245 @@ exports.triggerSosAlert = (0, https_1.onCall)({ region: "us-central1", timeoutSe
     };
 });
 // =============================================================================
-// SECCIÓN 14: RUTINAS AUTOMÁTICAS DE LIMPIEZA — MINIMIZACIÓN Y CONSERVACIÓN
+// SECCIÓN 14: CRM MÉDICO — registerInjury + issueMedicalDischarge
+//
+// registerInjury      (admin | coach | medico):
+//   Registra una lesión, cambia estado del atleta a "Lesionado / No Apto"
+//   y bloquea automáticamente el Smart ID (isEligible = false via statusOk).
+//   Notifica a padres/tutores vía FCM.
+//
+// issueMedicalDischarge  (admin | medico):
+//   Emite el alta médica. Restaura estado a "Acceso Autorizado".
+//   Actualiza lastMedicalReview. Desbloquea Smart ID.
+//   Notifica a padres/tutores.
+//
+// Art. 9 LOPDP: datos médicos de salud — tratamiento restrictivo.
+// Art. 10 LOPDP: se requiere consentimiento consent_datosSalud.
+// =============================================================================
+const INJURED_STATUS = "Lesionado / No Apto";
+const CLEARED_STATUS = "Acceso Autorizado";
+const MEDICAL_ROLES = new Set(["admin", "medico", "coach"]);
+const DISCHARGE_ROLES = new Set(["admin", "medico"]);
+const FIREBASE_STORAGE_URL_PREFIX = "https://firebasestorage.googleapis.com/";
+function isFirebaseStorageUrl(url) {
+    return !url || url.startsWith(FIREBASE_STORAGE_URL_PREFIX) || url.startsWith("gs://");
+}
+async function hasHealthConsent(athleteUid, athleteData) {
+    const directConsents = athleteData["consents"];
+    const directHealth = directConsents?.["datosSalud"];
+    if (directHealth?.["granted"] === true || athleteData["consent_datosSalud"] === true) {
+        return true;
+    }
+    const linkedUser = await db.collection("users")
+        .where("athleteDocId", "==", athleteUid)
+        .limit(1)
+        .get();
+    if (!linkedUser.empty) {
+        const data = linkedUser.docs[0].data();
+        const consents = data["consents"];
+        const health = consents?.["datosSalud"];
+        if (health?.["granted"] === true)
+            return true;
+    }
+    // Legacy migration path: bulk-ingestion consent_date existed before granular consents.
+    return athleteData["consent_timestamp"] != null;
+}
+exports.registerInjury = (0, https_1.onCall)({ region: "us-central1", secrets: [_masterKeySecret] }, async (request) => {
+    assertAuthenticated(request);
+    const callerUid = resolveAuth(request).uid;
+    // RBAC — solo staff médico/admin/coach puede registrar lesiones.
+    const callerDoc = await db.collection("users").doc(callerUid).get();
+    const callerRole = callerDoc.data()?.["role"];
+    if (!callerRole || !MEDICAL_ROLES.has(callerRole)) {
+        throw new https_1.HttpsError("permission-denied", "Solo personal autorizado puede registrar lesiones.");
+    }
+    const athleteUid = request.data["athleteUid"];
+    const injuryType = request.data["injuryType"];
+    const description = request.data["description"] ?? "";
+    const severity = request.data["severity"] ?? "yellow";
+    const bodyLocation = request.data["bodyLocation"] ?? "";
+    const documentUrl = request.data["documentUrl"] ?? "";
+    if (!athleteUid || !injuryType) {
+        throw new https_1.HttpsError("invalid-argument", "athleteUid e injuryType son requeridos.");
+    }
+    const athleteRef = db.collection("athletes").doc(athleteUid);
+    const athleteSnap = await athleteRef.get();
+    if (!athleteSnap.exists) {
+        throw new https_1.HttpsError("not-found", `Atleta ${athleteUid} no encontrado.`);
+    }
+    const athleteData = athleteSnap.data();
+    const athleteName = athleteData["full_name"] ?? "Desconocido";
+    const institutionId = athleteData["ownerInstitutionId"] ?? "";
+    if (!isFirebaseStorageUrl(documentUrl)) {
+        throw new https_1.HttpsError("invalid-argument", "documentUrl debe pertenecer a Firebase Storage.");
+    }
+    if (!(await hasHealthConsent(athleteUid, athleteData))) {
+        throw new https_1.HttpsError("failed-precondition", "No existe consentimiento vigente para tratamiento de datos de salud.");
+    }
+    // ── 1. Crear registro de lesión ──────────────────────────────────────
+    const injuryRef = db
+        .collection("medical_records")
+        .doc(athleteUid)
+        .collection("injuries")
+        .doc();
+    const injuryData = {
+        injuryType,
+        description,
+        severity,
+        bodyLocation,
+        status: "active",
+        reportedAt: firestore_1.FieldValue.serverTimestamp(),
+        reportedBy: callerUid,
+        institutionId,
+        athleteName,
+        documents: documentUrl ? [documentUrl] : [],
+    };
+    // ── 2. Actualizar estado del atleta (bloqueo automático Smart ID) ────
+    const athleteUpdate = {
+        status: INJURED_STATUS,
+        lastInjuryDate: firestore_1.FieldValue.serverTimestamp(),
+    };
+    const batch = db.batch();
+    batch.set(injuryRef, injuryData);
+    batch.update(athleteRef, athleteUpdate);
+    await batch.commit();
+    // ── 3. Notificar a padres/tutores ────────────────────────────────────
+    let pushSent = false;
+    try {
+        const parentUid = athleteData["parentUid"];
+        if (parentUid) {
+            const parentDoc = await db.collection("users").doc(parentUid).get();
+            const fcmToken = parentDoc.data()?.["fcmToken"];
+            if (fcmToken) {
+                const timeOpts = {
+                    timeZone: "America/Guayaquil", hour: "2-digit", minute: "2-digit",
+                };
+                const timeStr = new Date().toLocaleTimeString("es-ES", timeOpts);
+                await admin.messaging().send({
+                    token: fcmToken,
+                    notification: {
+                        title: `🚨 Lesión reportada: ${athleteName}`,
+                        body: `Se ha registrado una lesión (${injuryType}) a las ${timeStr}. El atleta queda en estado "No Apto" hasta recibir alta médica.`,
+                    },
+                    data: {
+                        type: "injury_registered",
+                        injuryId: injuryRef.id,
+                        athleteUid,
+                        severity,
+                    },
+                    android: { priority: "high" },
+                    apns: { payload: { aps: { sound: "default", badge: 1 } } },
+                });
+                pushSent = true;
+            }
+        }
+    }
+    catch (e) {
+        console.error("Error enviando notificación de lesión:", e);
+    }
+    // ── 4. Audit log ─────────────────────────────────────────────────────
+    await writeAuditLog("INJURY_REGISTERED", callerUid, {
+        athleteUid, athleteName, institutionId, injuryType, severity, injuryId: injuryRef.id,
+    }, extractIp(request));
+    return {
+        success: true,
+        injuryId: injuryRef.id,
+        athleteName,
+        newStatus: INJURED_STATUS,
+        pushSent,
+    };
+});
+exports.issueMedicalDischarge = (0, https_1.onCall)({ region: "us-central1", secrets: [_masterKeySecret] }, async (request) => {
+    assertAuthenticated(request);
+    const callerUid = resolveAuth(request).uid;
+    // RBAC — solo médico o admin pueden emitir alta.
+    const callerDoc = await db.collection("users").doc(callerUid).get();
+    const callerRole = callerDoc.data()?.["role"];
+    if (!callerRole || !DISCHARGE_ROLES.has(callerRole)) {
+        throw new https_1.HttpsError("permission-denied", "Solo médico o administrador puede emitir alta médica.");
+    }
+    const athleteUid = request.data["athleteUid"];
+    const injuryId = request.data["injuryId"];
+    const dischargeDocUrl = request.data["dischargeDocUrl"] ?? "";
+    const dischargeNotes = request.data["dischargeNotes"] ?? "";
+    if (!athleteUid || !injuryId) {
+        throw new https_1.HttpsError("invalid-argument", "athleteUid e injuryId son requeridos.");
+    }
+    const athleteRef = db.collection("athletes").doc(athleteUid);
+    const injuryRef = db
+        .collection("medical_records").doc(athleteUid)
+        .collection("injuries").doc(injuryId);
+    const [athleteSnap, injurySnap] = await Promise.all([
+        athleteRef.get(),
+        injuryRef.get(),
+    ]);
+    if (!athleteSnap.exists)
+        throw new https_1.HttpsError("not-found", `Atleta ${athleteUid} no encontrado.`);
+    if (!injurySnap.exists)
+        throw new https_1.HttpsError("not-found", `Lesión ${injuryId} no encontrada.`);
+    if (injurySnap.data()?.["status"] === "discharged") {
+        throw new https_1.HttpsError("already-exists", "Esta lesión ya tiene alta médica registrada.");
+    }
+    if (!isFirebaseStorageUrl(dischargeDocUrl)) {
+        throw new https_1.HttpsError("invalid-argument", "dischargeDocUrl debe pertenecer a Firebase Storage.");
+    }
+    const athleteData = athleteSnap.data();
+    const athleteName = athleteData["full_name"] ?? "Desconocido";
+    const institutionId = athleteData["ownerInstitutionId"] ?? "";
+    // ── 1. Actualizar lesión + estado del atleta ─────────────────────────
+    const nowTs = firestore_1.FieldValue.serverTimestamp();
+    const batch = db.batch();
+    batch.update(injuryRef, {
+        status: "discharged",
+        dischargedAt: nowTs,
+        dischargedBy: callerUid,
+        dischargeDocUrl,
+        dischargeNotes,
+    });
+    batch.update(athleteRef, {
+        status: CLEARED_STATUS,
+        lastMedicalReview: nowTs,
+    });
+    await batch.commit();
+    // ── 2. Notificar a padres/tutores ────────────────────────────────────
+    let pushSent = false;
+    try {
+        const parentUid = athleteData["parentUid"];
+        if (parentUid) {
+            const parentDoc = await db.collection("users").doc(parentUid).get();
+            const fcmToken = parentDoc.data()?.["fcmToken"];
+            if (fcmToken) {
+                await admin.messaging().send({
+                    token: fcmToken,
+                    notification: {
+                        title: `✅ Alta médica: ${athleteName}`,
+                        body: `${athleteName} ha recibido el alta médica y está habilitado para competir.`,
+                    },
+                    data: { type: "medical_discharge", athleteUid, injuryId },
+                    android: { priority: "high" },
+                    apns: { payload: { aps: { sound: "default", badge: 0 } } },
+                });
+                pushSent = true;
+            }
+        }
+    }
+    catch (e) {
+        console.error("Error enviando notificación de alta médica:", e);
+    }
+    // ── 3. Audit log ─────────────────────────────────────────────────────
+    await writeAuditLog("MEDICAL_DISCHARGE_ISSUED", callerUid, {
+        athleteUid, athleteName, institutionId, injuryId, dischargeDocUrl,
+    }, extractIp(request));
+    return {
+        success: true,
+        injuryId,
+        athleteName,
+        newStatus: CLEARED_STATUS,
+        pushSent,
+    };
+});
+// =============================================================================
+// SECCIÓN 15: RUTINAS AUTOMÁTICAS DE LIMPIEZA — MINIMIZACIÓN Y CONSERVACIÓN
 //
 // Art. 9 LOPDP: principio de minimización — solo conservar datos el tiempo necesario.
 // Art. 37 LOPDP: audit_logs conservados 24 meses; luego eliminados automáticamente.
@@ -1355,5 +1593,83 @@ exports.scheduledLopdpMaintenance = (0, scheduler_1.onSchedule)({
         console.log(`[lopdpMaintenance] arco_requests resueltos eliminados: ${oldArco.size}`);
     }
     console.log("[lopdpMaintenance] Mantenimiento mensual LOPDP completado.");
+});
+// ────────────────────────────────────────────────────────────────────────────
+// §16 — REPORTE DE ASISTENCIA
+//   Agrega attendance_logs por institución y rango de fechas.
+//   Devuelve stats por atleta: sesiones asistidas, total, porcentaje.
+//   Roles permitidos: admin, coach.
+// ────────────────────────────────────────────────────────────────────────────
+exports.getAttendanceReport = (0, https_1.onCall)({ region: "us-central1", enforceAppCheck: false }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError("unauthenticated", "Debes iniciar sesión.");
+    }
+    const callerUid = request.auth.uid;
+    const callerDoc = await db.collection("users").doc(callerUid).get();
+    const callerRole = callerDoc.data()?.["role"];
+    if (callerRole !== "admin" && callerRole !== "coach") {
+        throw new https_1.HttpsError("permission-denied", "Acceso restringido a admin y coach.");
+    }
+    const institutionId = request.data.institutionId;
+    const startMs = request.data.startMs;
+    const endMs = request.data.endMs;
+    const category = request.data.category;
+    if (!institutionId || typeof startMs !== "number" || typeof endMs !== "number") {
+        throw new https_1.HttpsError("invalid-argument", "Requeridos: institutionId, startMs, endMs.");
+    }
+    if (endMs <= startMs) {
+        throw new https_1.HttpsError("invalid-argument", "endMs debe ser mayor que startMs.");
+    }
+    // ── 1. Atletas de la institución ──────────────────────────────────────
+    let athleteQuery = db.collection("athletes")
+        .where("ownerInstitutionId", "==", institutionId);
+    if (category) {
+        athleteQuery = athleteQuery.where("teamOrCategory", "==", category);
+    }
+    const athleteSnaps = await athleteQuery.get();
+    // ── 2. Logs en el rango de fechas ────────────────────────────────────
+    const start = firestore_1.Timestamp.fromMillis(startMs);
+    const end = firestore_1.Timestamp.fromMillis(endMs);
+    const logSnaps = await db.collection("attendance_logs")
+        .where("timestamp", ">=", start)
+        .where("timestamp", "<=", end)
+        .get();
+    // ── 3. Contar ingresos por atleta y detectar días con actividad ───────
+    const ingresosByAthlete = new Map();
+    const sessionDates = new Set();
+    for (const logDoc of logSnaps.docs) {
+        const data = logDoc.data();
+        const uid = data["athleteUid"];
+        const action = data["action"];
+        const ts = data["timestamp"];
+        if (!uid || action !== "ingreso")
+            continue;
+        ingresosByAthlete.set(uid, (ingresosByAthlete.get(uid) ?? 0) + 1);
+        if (ts) {
+            const localDate = ts.toDate().toLocaleDateString("es-EC", { timeZone: "America/Guayaquil" });
+            sessionDates.add(localDate);
+        }
+    }
+    const totalSessions = sessionDates.size || 1; // evita división entre 0
+    // ── 4. Construir reporte por atleta ───────────────────────────────────
+    const report = athleteSnaps.docs.map((doc) => {
+        const data = doc.data();
+        const uid = doc.id;
+        const sessionsAttended = ingresosByAthlete.get(uid) ?? 0;
+        const percentage = Math.round((sessionsAttended / totalSessions) * 100);
+        return {
+            athleteUid: uid,
+            fullName: data["full_name"] ?? "Sin nombre",
+            category: data["teamOrCategory"] ?? "Sin categoría",
+            status: data["status"] ?? "Acceso Autorizado",
+            isMinor: data["isMinor"] ?? false,
+            sessionsAttended,
+            totalSessions,
+            percentage: Math.min(percentage, 100),
+        };
+    });
+    report.sort((a, b) => b.percentage - a.percentage);
+    await writeAuditLog("getAttendanceReport", callerUid, { institutionId, startMs, endMs, category: category ?? null, athleteCount: report.length }, extractIp(request));
+    return { report, totalSessions: sessionDates.size, startMs, endMs, institutionId };
 });
 //# sourceMappingURL=index.js.map

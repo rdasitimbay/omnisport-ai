@@ -16,6 +16,9 @@ class _RbacManagementScreenState extends State<RbacManagementScreen> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   int _currentTabIndex = 0;
 
+  // Catalog controllers are cached to avoid leaks from FutureBuilder rebuilds
+  final Map<String, TextEditingController> _catalogControllers = {};
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -126,7 +129,10 @@ class _RbacManagementScreenState extends State<RbacManagementScreen> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: data.entries.map((e) {
-            final controller = TextEditingController(text: e.value.toString());
+            // Reuse cached controller or create new one — prevents leaks on rebuild
+            final controller = _catalogControllers.putIfAbsent(
+              e.key, () => TextEditingController(text: e.value.toString()),
+            );
             return Padding(
               padding: const EdgeInsets.only(bottom: 16.0),
               child: TextField(
@@ -328,9 +334,9 @@ class _RbacManagementScreenState extends State<RbacManagementScreen> {
 
     setState(() => _isBroadcasting = true);
     try {
-      final fn = FirebaseFunctions.instanceFor(region: 'us-central1')
-          .httpsCallable('broadcastEmergencyPush');
-      final result = await fn.call({'message': message, 'title': title});
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('broadcastEmergencyPush')
+          .call({'message': message, 'title': title});
       final data = result.data as Map<String, dynamic>;
 
       if (mounted) {
@@ -439,6 +445,9 @@ class _RbacManagementScreenState extends State<RbacManagementScreen> {
   void dispose() {
     _broadcastController.dispose();
     _broadcastTitleController.dispose();
+    // Dispose all catalog controllers
+    for (final c in _catalogControllers.values) { c.dispose(); }
+    _catalogControllers.clear();
     _cooldownTimer?.cancel();
     super.dispose();
   }

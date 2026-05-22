@@ -1,14 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:csv/csv.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/ingestion_result.dart';
 
 // Validador puro: nunca escribe en Firestore.
 // La persistencia es responsabilidad de AdminIngestionController vía Cloud Function.
 class BulkIngestionService {
-  final FirebaseFirestore _firestore;
-
-  BulkIngestionService({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  BulkIngestionService({FirebaseFirestore? firestore});
 
   // Valida el CSV y verifica duplicados en Firestore (solo lectura).
   // Art. 10 LOPDP: el cliente no persiste datos sensibles directamente.
@@ -59,7 +56,6 @@ class BulkIngestionService {
     int nameIndex    = headers.indexWhere((h) => h.contains('full_name') || h.contains('nombre'));
     int dniIndex     = headers.indexWhere((h) => h.contains('dni'));
     int emailIndex   = headers.indexWhere((h) => h.contains('email') || h.contains('correo'));
-    int phoneIndex   = headers.indexWhere((h) => h.contains('phone') || h.contains('telefono'));
     int teamIndex    = headers.indexWhere((h) => h.contains('team') || h.contains('categor'));
     int consentIndex = headers.indexWhere((h) => h.contains('consent_date') || h.contains('consentimiento'));
 

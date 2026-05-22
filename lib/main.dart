@@ -9,7 +9,6 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'screens/splash_screen.dart';
-import 'screens/admin_dashboard_screen.dart';
 import 'screens/auth_gateway.dart';
 import 'screens/login_screen.dart';
 import 'screens/language_picker_screen.dart';
@@ -49,7 +48,6 @@ void main() async {
         FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);
         await FirebaseAuth.instance.useAuthEmulator(host, 9099);
         FirebaseFunctions.instance.useFunctionsEmulator(host, 5001);
-        FirebaseFunctions.instanceFor(region: 'us-central1').useFunctionsEmulator(host, 5001);
         debugPrint('Firebase Emulators connected (Firestore on 8080, Auth on 9099, Functions on 5001)');
       } catch (e) {
         debugPrint('Error connecting to emulators: $e');
@@ -76,12 +74,14 @@ void main() async {
       appLocaleNotifier.value = Locale(lang);
     }
 
-    // Configurar persistencia local para mantener la sesión abierta
-    await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    // Persistencia de sesión — solo Web (en iOS/Android es la default nativa)
+    if (kIsWeb) {
+      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    }
 
     if (kIsWeb) {
       final redirectResult = await FirebaseAuth.instance.getRedirectResult();
-      if (redirectResult != null && redirectResult.user != null) {
+      if (redirectResult.user != null) {
         debugPrint(
           "Redirect detectado con éxito: ${redirectResult.user?.email}",
         );

@@ -131,7 +131,10 @@ class _TrainingScreenState extends State<TrainingScreen> {
               return _buildErrorState(snapshot.error.toString());
             } else if (snapshot.hasData) {
               final List exercises = snapshot.data!['exercises'] ?? [];
-              _completedExercises ??= List.filled(exercises.length, false);
+              // Re-initialize if null OR if exercise count changed (e.g. after retry)
+              if (_completedExercises == null || _completedExercises!.length != exercises.length) {
+                _completedExercises = List.filled(exercises.length, false);
+              }
               return _buildMainContent(exercises);
             } else {
               return const Center(

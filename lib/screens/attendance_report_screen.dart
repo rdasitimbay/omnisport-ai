@@ -61,7 +61,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
   Future<void> _fetchReport() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final callable = FirebaseFunctions.instanceFor(region: 'us-central1')
+      final callable = FirebaseFunctions.instance
           .httpsCallable('getAttendanceReport');
       final result = await callable.call({
         'institutionId': widget.institutionId,
@@ -325,7 +325,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     final perfect = _report.where((r) => (r['percentage'] as int? ?? 0) >= 100).length;
     final atRisk = _report.where((r) => (r['percentage'] as int? ?? 0) < 50).length;
     final avgPct  = total > 0
-        ? _report.fold<int>(0, (s, r) => s + ((r['percentage'] as int?) ?? 0)) ~/ total
+        ? (_report.fold<int>(0, (s, r) => s + ((r['percentage'] as int?) ?? 0)) / total).round()
         : 0;
 
     return Padding(
@@ -504,7 +504,7 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
-                  value: pct / 100,
+                  value: (pct / 100).clamp(0.0, 1.0),
                   minHeight: 4,
                   backgroundColor: Colors.white.withValues(alpha: 0.08),
                   valueColor: AlwaysStoppedAnimation<Color>(barColor),

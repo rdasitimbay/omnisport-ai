@@ -16,11 +16,10 @@ import 'session_attendance_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final String institutionId;
-  const AdminDashboardScreen({Key? key, required this.institutionId})
-      : super(key: key);
+  const AdminDashboardScreen({super.key, required this.institutionId});
 
   @override
-  _AdminDashboardScreenState createState() => _AdminDashboardScreenState();
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
@@ -31,8 +30,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _isCheckingPermissions = true;
   String? _errorMessage;
 
-  Map<String, bool>   _unmaskedDniVisibility = {};
-  Map<String, String> _unmaskedDniData       = {};
+  final Map<String, bool>   _unmaskedDniVisibility = {};
+  final Map<String, String> _unmaskedDniData       = {};
 
   @override
   void initState() {
@@ -475,7 +474,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 color: Colors.white,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 1.5)),
-        backgroundColor: Colors.black.withOpacity(0.5),
+        backgroundColor: Colors.black.withValues(alpha: 0.5),
         elevation: 0,
         flexibleSpace: ClipRect(
           child: BackdropFilter(
@@ -488,31 +487,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             icon: const Icon(Icons.auto_fix_high, color: Colors.amberAccent),
             tooltip: 'Seed Firestore',
             onPressed: () async {
-              // Seeding Notification Templates
+              final messenger = ScaffoldMessenger.of(context);
               await FirebaseFirestore.instance.collection('app_config').doc('notification_templates').set({
                  'Ingreso Atleta': 'El atleta {name} ha registrado su entrada.',
                  'Salida Segura': 'El atleta {name} ha registrado su salida.',
                  'Aviso de Emergencia': 'ALERTA: Se ha reportado una situación médica urgente.'
               });
-
-              // FCM Ghost Device Registration
-              await FirebaseFirestore.instance.collection('users').doc('ghost_device_001').set({
-                 'email': 'fantasma@omnisport.ai',
-                 'role': 'user',
-                 'fcmToken': 'fcm_token_fantasma_xyz987',
-                 'fcmLastUpdated': FieldValue.serverTimestamp(),
-              }, SetOptions(merge: true));
-              // Seeding Athletes
-              final athletes = [
-                 {'name': 'Carlos Ruiz', 'category': 'MAYORES', 'dni_hash': '1234'},
-                 {'name': 'Ximena Cruz', 'category': 'FEMENINO', 'dni_hash': '5678'},
-                 {'name': 'Pedro Paz', 'category': 'SUB 10', 'dni_hash': '9012'},
-                 {'name': 'Juan Perez', 'category': 'SUB 18', 'dni_hash': '3456'},
-              ];
-              for (var a in athletes) {
-                 await FirebaseFirestore.instance.collection('athletes').add(a);
-              }
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Seeding exitoso: Plantillas y Atletas inyectados.')));
+              if (!mounted) return;
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Plantillas de notificación actualizadas.')),
+              );
             },
           ),
           IconButton(
@@ -599,13 +583,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             Expanded(
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.1),
+                                  color: Colors.white.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(32),
                                   border: Border.all(
-                                      color: Colors.white.withOpacity(0.2)),
+                                      color: Colors.white.withValues(alpha: 0.2)),
                                   boxShadow: [
                                     BoxShadow(
-                                        color: Colors.black.withOpacity(0.2),
+                                        color: Colors.black.withValues(alpha: 0.2),
                                         blurRadius: 40,
                                         spreadRadius: -10),
                                   ],
@@ -621,9 +605,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                         scrollDirection: Axis.horizontal,
                                         child: DataTable(
                                           headingRowColor:
-                                              MaterialStateProperty.all(
+                                              WidgetStateProperty.all(
                                                   Colors.white
-                                                      .withOpacity(0.05)),
+                                                      .withValues(alpha: 0.05)),
                                           columns: const [
                                             DataColumn(
                                                 label: Text('IDENTIDAD',
@@ -695,7 +679,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                                 decoration: BoxDecoration(
                                                   color: isVisible
                                                       ? Colors.white
-                                                          .withOpacity(0.2)
+                                                          .withValues(alpha: 0.2)
                                                       : Colors.black12,
                                                   borderRadius:
                                                       BorderRadius.circular(8),
@@ -776,9 +760,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.08),
+          color: Colors.white.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withOpacity(0.1)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

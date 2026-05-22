@@ -103,13 +103,14 @@ class _SportPassportScreenState extends State<SportPassportScreen>
           .httpsCallable('generateSmartId')
           .call({'athleteUid': widget.athleteId});
 
-      final data       = Map<String, dynamic>.from(result.data as Map);
-      final token      = data['token']      as String;
-      final smartIdNum = data['smartIdNum'] as String;
-      final isEligible = data['isEligible'] as bool;
-      final medicalOk  = data['medicalOk']  as bool;
-      final paymentOk  = data['paymentOk']  as bool;
-      final expMs      = (data['expMs'] as num).toInt();
+      final data       = Map<String, dynamic>.from(result.data as Map? ?? {});
+      final token      = data['token']      as String?      ?? '';
+      final smartIdNum = data['smartIdNum'] as String?      ?? '';
+      final isEligible = data['isEligible'] as bool?        ?? false;
+      final medicalOk  = data['medicalOk']  as bool?        ?? false;
+      final paymentOk  = data['paymentOk']  as bool?        ?? false;
+      final expMs      = ((data['expMs']    as num?)        ?? 0).toInt();
+      if (token.isEmpty) throw Exception('Token vacío recibido del servidor');
 
       final cred = SmartIdCredential.fromTokenResponse(
         athleteUid: widget.athleteId,
@@ -243,6 +244,7 @@ class _SportPassportScreenState extends State<SportPassportScreen>
   }
 
   Widget _buildPassport() {
+    if (_credential == null) return _buildLoading();
     final cred = _credential!;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
@@ -276,9 +278,9 @@ class _SportPassportScreenState extends State<SportPassportScreen>
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.orangeAccent.withOpacity(0.15),
+        color: Colors.orangeAccent.withValues(alpha:0.15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orangeAccent.withOpacity(0.4)),
+        border: Border.all(color: Colors.orangeAccent.withValues(alpha:0.4)),
       ),
       child: Row(
         children: [
@@ -309,9 +311,9 @@ class _SportPassportScreenState extends State<SportPassportScreen>
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
+            color: Colors.white.withValues(alpha:0.08),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.12)),
+            border: Border.all(color: Colors.white.withValues(alpha:0.12)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -404,7 +406,7 @@ class _SportPassportScreenState extends State<SportPassportScreen>
     return Text(
       'Protegido por LOPDP Art. 5 — Minimización de datos.\n'
       'El árbitro solo ve elegibilidad y estado médico.',
-      style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10, height: 1.5),
+      style: TextStyle(color: Colors.white.withValues(alpha:0.3), fontSize: 10, height: 1.5),
       textAlign: TextAlign.center,
     );
   }

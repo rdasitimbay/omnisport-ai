@@ -31,10 +31,19 @@ class QrScannerScreen extends StatefulWidget {
 }
 
 class _QrScannerScreenState extends State<QrScannerScreen> {
-  final MobileScannerController _scannerController = MobileScannerController(
-    detectionSpeed:
-        DetectionSpeed.normal, // Cambiado para evitar bloqueo en Android
-  );
+  MobileScannerController? _scannerController;
+
+  @override
+  void initState() {
+    super.initState();
+    // No inicializar la cámara en test mode — MobileScannerController accede
+    // al plugin nativo que no está disponible en el entorno de test headless.
+    if (!widget.isTestMode) {
+      _scannerController = MobileScannerController(
+        detectionSpeed: DetectionSpeed.normal,
+      );
+    }
+  }
 
   // El caché de simulación offline fue reemplazado por OfflineSyncService (TKT-004)
 
@@ -46,14 +55,13 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
   // Datos temporales tras escaneo
   String? _scannedUid;
-  Map<String, dynamic>? _athleteData;
   String _message = 'Escanea el pase del Atleta';
   bool _isProcessing = false;
   DateTime? _lastScanTime; // Para Debounce manual
 
   @override
   void dispose() {
-    _scannerController.dispose();
+    _scannerController?.dispose();
     super.dispose();
   }
 
@@ -117,55 +125,72 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       return;
     }
 
+    final originalState = _currentState;
     setState(() {
       _isProcessing = true;
-      _currentState = ScanState.loadingAthlete;
+      if (originalState != ScanState.waitingGuardian) {
+        _currentState = ScanState.loadingAthlete;
+      }
     });
 
-    // 1. Obtener Geofencing (Ubicación)
+    // 1. Obtener Geofencing (Ubicación) — omitido en test mode (plugins nativos no disponibles)
     Map<String, dynamic>? locationData;
-    try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
+    if (!widget.isTestMode) {
+      try {
+        var permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+        if (permission != LocationPermission.deniedForever &&
+            (permission == LocationPermission.whileInUse ||
+             permission == LocationPermission.always)) {
+          final position = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 5),
+            ),
+          );
+          locationData = {
+            'latitude': position.latitude,
+            'longitude': position.longitude,
+          };
+        }
+      } catch (e) {
+        debugPrint("Geofencing Error: $e");
       }
-      if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
-        Position position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high);
-        locationData = {
-          'latitude': position.latitude,
-          'longitude': position.longitude,
-        };
-      }
-    } catch (e) {
-      debugPrint("Geofencing Error: $e");
     }
 
-    // 2. Validar Token en Backend (Sprint 4)
+    // 2. Validar Token en Backend
     String resolvedUid = '';
-    try {
-      final result = await FirebaseFunctions.instanceFor(region: 'us-central1')
-          .httpsCallable('validateAttendanceToken')
-          .call({
-        'token': jwtToken,
-        'action': _actionLabel,
-        'location': locationData,
-      });
+    if (widget.isTestMode) {
+      // En modo test el "token" es el UID directamente — bypass de CF para tests unitarios.
+      // La lógica de validación de CF se cubre en backoffice_integration_test.dart.
+      resolvedUid = jwtToken;
+    } else {
+      try {
+        final result = await FirebaseFunctions.instance
+            .httpsCallable('validateAttendanceToken')
+            .call({
+          'token': jwtToken,
+          'action': _actionLabel,
+          'location': locationData,
+        });
 
-      if (result.data['success'] == true) {
-        final parts = jwtToken.split(':');
-        resolvedUid = parts.length >= 3 ? parts[0] : jwtToken;
+        if (result.data['success'] == true) {
+          final parts = jwtToken.split(':');
+          resolvedUid = parts.length >= 3 ? parts[0] : jwtToken;
+        }
+      } catch (e) {
+        if (e is FirebaseFunctionsException) {
+          _setInvalid(e.message ?? "Token Inválido o Falso");
+        } else {
+          _setInvalid("Error de Red al Validar");
+        }
+        return;
       }
-    } catch (e) {
-      if (e is FirebaseFunctionsException) {
-        _setInvalid(e.message ?? "Token Inválido o Falso");
-      } else {
-        _setInvalid("Error de Red al Validar");
-      }
-      return;
     }
 
-    if (_currentState == ScanState.loadingAthlete || _currentState == ScanState.scanningAthlete) {
+    if (originalState == ScanState.loadingAthlete || originalState == ScanState.scanningAthlete) {
       if (mounted) {
         setState(() {
           _scannedUid = resolvedUid;
@@ -173,9 +198,11 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         });
       }
 
-      await Future.delayed(
-        const Duration(milliseconds: 600),
-      ); // Efecto dramático de red para ver el Skeleton
+      // Skeleton loading delay — omitido en test mode (FakeAsync no avanza sin pump)
+      if (!widget.isTestMode) {
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (!mounted) return;
+      }
 
       try {
         final doc = await (widget.firestore ?? FirebaseFirestore.instance)
@@ -189,13 +216,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
         final data = doc.data()!;
         final bool isMinor = _checkIfMinor(data);
-        // Aunque tenemos data aquí, UI usará un StreamBuilder para pintar el modelo Athlete
-
-        if (mounted) {
-          setState(() {
-            _athleteData = data;
-          });
-        }
+        // UI usa StreamBuilder para pintar el modelo Athlete
 
         if (isMinor) {
           if (mounted) {
@@ -208,16 +229,16 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         } else {
           // La Cloud Function ya registró el log y envió el Push (Sprint 4)
           // Solo registramos el log offline como backup si se desea, o delegamos todo a la nube.
-          _logAccess(resolvedUid, "athlete_solo");
+          if (!widget.isTestMode) _logAccess(resolvedUid, "athlete_solo");
           _setSuccess(_isEntry ? "Ingreso Apto" : "Salida Registrada");
         }
       } catch (e) {
-        print("ERROR EN FIRESTORE: $e");
-        _setInvalid("Data Error: $e");
+        debugPrint("ERROR EN FIRESTORE: $e");
+        _setInvalid("Error al cargar datos del atleta");
       }
-    } else if (_currentState == ScanState.waitingGuardian) {
+    } else if (originalState == ScanState.waitingGuardian) {
       // Asumimos que el 2do QR es del tutor autorizando.
-      _logAccess(_scannedUid!, "athlete_with_guardian_$resolvedUid");
+      if (!widget.isTestMode) _logAccess(_scannedUid!, "athlete_with_guardian_$resolvedUid");
       _setSuccess("Match Completado\nIngreso Apto");
     }
   }
@@ -231,7 +252,12 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       final String dob = data['fecha_nacimiento'];
       try {
         final date = DateTime.parse(dob);
-        final age = DateTime.now().year - date.year;
+        final now  = DateTime.now();
+        var age = now.year - date.year;
+        if (now.month < date.month ||
+            (now.month == date.month && now.day < date.day)) {
+          age--;
+        }
         return age < 18;
       } catch (_) {}
     }
@@ -252,17 +278,6 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     OfflineSyncService.saveModelLocally(logData).then((_) {
       OfflineSyncService.syncLogs(firestore: widget.firestore);
     });
-  }
-
-  void _simulateOpalAINotification(String uid, String name) {
-    // Fase 1: Simulación Local (Spark Plan Cost Zero)
-    final time = DateTime.now().toString().substring(11, 16);
-    debugPrint("------------------------------------------");
-    debugPrint("🔔 OPAL AI PUSH NOTIFICATION (Simulada)");
-    debugPrint(
-      "Mensaje: Opal AI informa: $name ha ingresado al complejo a las $time",
-    );
-    debugPrint("------------------------------------------");
   }
 
   void _setSuccess(String msg) {
@@ -291,14 +306,13 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       _currentState = ScanState.scanningAthlete;
       _message = 'Escanea el pase del Atleta';
       _isProcessing = false;
-      _athleteData = null;
       _scannedUid = null;
     });
 
     // IMPORTANTE PARA ANDROID: Reactiva el controlador para continuar leyendo
-    if (!widget.isTestMode) {
+    if (!widget.isTestMode && _scannerController != null) {
       try {
-        _scannerController.start();
+        _scannerController!.start();
       } catch (_) {}
     }
   }
@@ -330,8 +344,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       body: Stack(
         children: [
           // Mobile Scanner Fullscreen
-          if (!widget.isTestMode)
-            MobileScanner(controller: _scannerController, onDetect: _onDetect),
+          if (!widget.isTestMode && _scannerController != null)
+            MobileScanner(controller: _scannerController!, onDetect: _onDetect),
 
           // Overlay Oscurecido para enfoque
           Container(
@@ -557,9 +571,11 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           return _buildSkeletonLoader(baseNeonColor);
         }
 
+        // iOS fix: Map.from() evita crash con Map<Object?, Object?>
+        final rawAthleteData = snapshot.data!.data();
         final model = Athlete.fromMap(
           _scannedUid!,
-          snapshot.data!.data() as Map<String, dynamic>,
+          rawAthleteData != null ? Map<String, dynamic>.from(rawAthleteData as Map) : {},
         );
 
         // Lógica de Semáforo Diamond Glass (basado en status)

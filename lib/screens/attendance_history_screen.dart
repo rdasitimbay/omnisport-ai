@@ -177,8 +177,11 @@ class AttendanceHistoryScreen extends StatelessWidget {
                       ),
                       itemCount: docs.length,
                       itemBuilder: (context, index) {
-                        final data =
-                            docs[index].data() as Map<String, dynamic>;
+                        // iOS fix: Map.from() evita crash con Map<Object?, Object?>
+                        final rawData = docs[index].data();
+                        final data = rawData != null
+                            ? Map<String, dynamic>.from(rawData as Map)
+                            : <String, dynamic>{};
                         return _buildLogTile(data, index == 0);
                       },
                     );

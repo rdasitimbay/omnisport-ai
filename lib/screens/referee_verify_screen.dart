@@ -36,7 +36,7 @@ class _RefereeVerifyScreenState extends State<RefereeVerifyScreen> {
           .call({'token': widget.token});
       if (mounted) {
         setState(() {
-          _result  = Map<String, dynamic>.from(res.data as Map);
+          _result  = Map<String, dynamic>.from(res.data as Map? ?? {});
           _loading = false;
         });
       }

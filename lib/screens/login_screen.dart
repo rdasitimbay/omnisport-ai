@@ -4,7 +4,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../l10n/app_localizations.dart';
@@ -43,7 +42,9 @@ class _LoginScreenState extends State<LoginScreen> {
         final googleProvider = GoogleAuthProvider();
         userCredential = await FirebaseAuth.instance.signInWithPopup(googleProvider);
       } else {
-        final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+        final GoogleSignInAccount? googleUser = await GoogleSignIn(
+          serverClientId: '430589318678-vvjddb5b9fpieq7dlodcloe1a3fkbtqp.apps.googleusercontent.com',
+        ).signIn();
         final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
         if (googleAuth != null) {
           final credential = GoogleAuthProvider.credential(

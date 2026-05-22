@@ -30,6 +30,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String?    _tutorDocName;
   bool       _pickingPhoto   = false;
 
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
   bool get _allConsentsAccepted =>
       _consentPersonal && _consentSalud && _consentNotificaciones;
 

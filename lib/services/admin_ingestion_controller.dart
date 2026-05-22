@@ -44,7 +44,7 @@ class AdminIngestionController {
         'institutionId': institutionId,
       });
 
-      final data = Map<String, dynamic>.from(result.data ?? {});
+      final data = Map<String, dynamic>.from(result.data as Map);
       return IngestionSummary(
         total:  (data['total']  as num?)?.toInt() ?? 0,
         valid:  (data['valid']  as num?)?.toInt() ?? 0,

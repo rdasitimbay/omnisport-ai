@@ -50,7 +50,18 @@ class AIService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final String text = data['candidates'][0]['content']['parts'][0]['text'];
+        // Guard against unexpected API response structure (empty candidates/parts)
+        final candidates = data['candidates'] as List?;
+        if (candidates == null || candidates.isEmpty) {
+          debugPrint('AIService: no candidates in response. Activando Resiliencia.');
+          return _getMockRoutineJson(athleteName, discipline);
+        }
+        final parts = candidates[0]['content']?['parts'] as List?;
+        if (parts == null || parts.isEmpty) {
+          debugPrint('AIService: no parts in response. Activando Resiliencia.');
+          return _getMockRoutineJson(athleteName, discipline);
+        }
+        final String text = (parts[0]['text'] as String?) ?? '';
         // Limpiamos posibles caracteres extra de markdown si el modelo los incluyó
         final cleanedJson = text.replaceAll('```json', '').replaceAll('```', '').trim();
         return jsonDecode(cleanedJson);

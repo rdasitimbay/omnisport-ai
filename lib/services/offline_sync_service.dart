@@ -22,6 +22,8 @@ class OfflineSyncService {
   }
 
   static void _startSyncQueue() {
+    // Cancel previous subscription before creating a new one to avoid duplicates
+    _connectivitySubscription?.cancel();
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
       List<ConnectivityResult> results,
     ) {
@@ -127,7 +129,8 @@ class OfflineSyncService {
   /// Verifica la conexión a Internet real intentando resolver DNS
   static Future<bool> _hasInternetConnection() async {
     if (forceOfflineMode) return false;
-    if (kIsWeb || Platform.environment.containsKey('FLUTTER_TEST')) return true;
+    if (kIsWeb) return true;
+    if (!kIsWeb && Platform.environment.containsKey('FLUTTER_TEST')) return true;
     try {
       final result = await InternetAddress.lookup('google.com');
       return result.isNotEmpty && result[0].rawAddress.isNotEmpty;

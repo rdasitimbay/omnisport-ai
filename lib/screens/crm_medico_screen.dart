@@ -144,7 +144,7 @@ class _ActiveInjuriesTab extends StatelessWidget {
         return ListView.separated(
           padding: const EdgeInsets.all(16),
           itemCount: docs.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          separatorBuilder: (context, index) => const SizedBox(height: 10),
           itemBuilder: (_, i) => _InjuredAthleteCard(
             athleteDoc: docs[i],
           ),
@@ -373,7 +373,8 @@ class _MedicalDischargeSheetState extends State<_MedicalDischargeSheet> {
       allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
       withData: true,
     );
-    if (result != null && result.files.single.bytes != null && mounted) {
+    if (result != null && result.files.isNotEmpty &&
+        result.files.single.bytes != null && mounted) {
       setState(() => _docBytes = result.files.single.bytes);
     }
   }
@@ -384,7 +385,7 @@ class _MedicalDischargeSheetState extends State<_MedicalDischargeSheet> {
     try {
       final ref = FirebaseStorage.instance.ref(
           'medical_docs/${widget.athleteUid}/${widget.injuryId}_discharge_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await ref.putData(_docBytes!, SettableMetadata(contentType: 'image/jpeg'));
+      await ref.putData(_docBytes!);
       return await ref.getDownloadURL();
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -395,7 +396,7 @@ class _MedicalDischargeSheetState extends State<_MedicalDischargeSheet> {
     setState(() => _submitting = true);
     try {
       final docUrl = await _uploadDoc();
-      await FirebaseFunctions.instanceFor(region: 'us-central1')
+      await FirebaseFunctions.instance
           .httpsCallable('issueMedicalDischarge')
           .call({
         'athleteUid':      widget.athleteUid,
@@ -637,7 +638,8 @@ class _RegisterInjuryTabState extends State<_RegisterInjuryTab> {
       allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
       withData: true,
     );
-    if (result != null && result.files.single.bytes != null && mounted) {
+    if (result != null && result.files.isNotEmpty &&
+        result.files.single.bytes != null && mounted) {
       setState(() => _docBytes = result.files.single.bytes);
     }
   }
@@ -648,7 +650,7 @@ class _RegisterInjuryTabState extends State<_RegisterInjuryTab> {
     try {
       final ref = FirebaseStorage.instance.ref(
           'medical_docs/$athleteUid/injury_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      await ref.putData(_docBytes!, SettableMetadata(contentType: 'image/jpeg'));
+      await ref.putData(_docBytes!);
       return await ref.getDownloadURL();
     } finally {
       if (mounted) setState(() => _uploadingDoc = false);
@@ -667,7 +669,7 @@ class _RegisterInjuryTabState extends State<_RegisterInjuryTab> {
     setState(() => _submitting = true);
     try {
       final docUrl = await _uploadDoc(_selectedAthleteUid!);
-      await FirebaseFunctions.instanceFor(region: 'us-central1')
+      await FirebaseFunctions.instance
           .httpsCallable('registerInjury')
           .call({
         'athleteUid':   _selectedAthleteUid,

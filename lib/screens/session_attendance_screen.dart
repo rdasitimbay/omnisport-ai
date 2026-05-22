@@ -39,9 +39,9 @@ class _SessionAttendanceScreenState extends State<SessionAttendanceScreen>
   void initState() {
     super.initState();
     _tab = TabController(length: 3, vsync: this);
-    final now = DateTime.now().toLocal();
-    final startOfDay = DateTime(now.year, now.month, now.day);
-    final endOfDay   = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    final now = DateTime.now().toUtc();
+    final startOfDay = DateTime.utc(now.year, now.month, now.day);
+    final endOfDay   = DateTime.utc(now.year, now.month, now.day + 1);
     _todayStart = Timestamp.fromDate(startOfDay);
     _todayEnd   = Timestamp.fromDate(endOfDay);
   }
@@ -71,19 +71,27 @@ class _SessionAttendanceScreenState extends State<SessionAttendanceScreen>
   Future<void> _markManual(String athleteUid, String action) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    await FirebaseFirestore.instance.collection('attendance_logs').add({
-      'athleteUid': athleteUid,
-      'scannedBy':  user.uid,
-      'action':     action,
-      'location':   'Manual — ${widget.coachName}',
-      'timestamp':  FieldValue.serverTimestamp(),
-      'status':     'manual',
-    });
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(action == 'ingreso' ? 'Ingreso registrado' : 'Salida registrada'),
-      backgroundColor: action == 'ingreso' ? const Color(0xFF00C853) : Colors.orange,
-    ));
+    try {
+      await FirebaseFirestore.instance.collection('attendance_logs').add({
+        'athleteUid': athleteUid,
+        'scannedBy':  user.uid,
+        'action':     action,
+        'location':   'Manual — ${widget.coachName}',
+        'timestamp':  FieldValue.serverTimestamp(),
+        'status':     'manual',
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(action == 'ingreso' ? 'Ingreso registrado' : 'Salida registrada'),
+        backgroundColor: action == 'ingreso' ? const Color(0xFF00C853) : Colors.orange,
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error al registrar: ${e.toString().split(']').last.trim()}'),
+        backgroundColor: Colors.redAccent,
+      ));
+    }
   }
 
   @override

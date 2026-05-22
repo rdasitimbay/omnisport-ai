@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:geolocator/geolocator.dart';
@@ -88,12 +87,20 @@ class _SosAlertScreenState extends State<SosAlertScreen>
     double? lat, lng;
     String locationName = 'Ubicación no disponible';
     try {
-      final permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.whileInUse ||
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.deniedForever) {
+        // No crash — continuar sin GPS
+      } else if (permission == LocationPermission.whileInUse ||
           permission == LocationPermission.always) {
         final pos = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-        ).timeout(const Duration(seconds: 5));
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 5),
+          ),
+        );
         lat = pos.latitude;
         lng = pos.longitude;
         locationName = '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
@@ -101,7 +108,7 @@ class _SosAlertScreenState extends State<SosAlertScreen>
     } catch (_) {}
 
     try {
-      final result = await FirebaseFunctions.instanceFor(region: 'us-central1')
+      final result = await FirebaseFunctions.instance
           .httpsCallable('triggerSosAlert')
           .call({
         'athleteUid': widget.athleteUid,
@@ -112,7 +119,7 @@ class _SosAlertScreenState extends State<SosAlertScreen>
         'locationName': locationName,
       });
 
-      final data = result.data as Map<String, dynamic>;
+      final data = Map<String, dynamic>.from(result.data as Map? ?? {});
       setState(() {
         _protocolResponse = data['protocol'] as Map<String, dynamic>?;
         _isSending = false;
@@ -449,10 +456,10 @@ class _SosAlertScreenState extends State<SosAlertScreen>
   // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildTriageProtocol() {
     final protocol = _protocolResponse!;
-    final severity = protocol['severity'] as String;
-    final title = protocol['title'] as String;
-    final steps = List<String>.from(protocol['steps'] as List);
-    final callEmergency = protocol['callEmergency'] as bool;
+    final severity     = protocol['severity']      as String?  ?? 'green';
+    final title        = protocol['title']         as String?  ?? 'Protocolo de atención';
+    final steps        = List<String>.from(protocol['steps']   as List?  ?? []);
+    final callEmergency = protocol['callEmergency'] as bool?   ?? false;
 
     final severityColor = severity == 'red'
         ? const Color(0xFFFF1744)

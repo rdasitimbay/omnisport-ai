@@ -157,10 +157,10 @@ class _ChildCard extends StatelessWidget {
     final photoUrl = data['photoUrl'] as String?;
     final isMinor  = (data['isMinor'] as bool?) ?? true;
 
-    // Rango del día de hoy
-    final now      = DateTime.now().toLocal();
-    final startDay = Timestamp.fromDate(DateTime(now.year, now.month, now.day));
-    final endDay   = Timestamp.fromDate(DateTime(now.year, now.month, now.day, 23, 59, 59));
+    // Rango del día de hoy en UTC (Firestore almacena UTC — igual que BUG-11)
+    final now      = DateTime.now().toUtc();
+    final startDay = Timestamp.fromDate(DateTime.utc(now.year, now.month, now.day));
+    final endDay   = Timestamp.fromDate(DateTime.utc(now.year, now.month, now.day + 1));
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -214,7 +214,7 @@ class _ChildCard extends StatelessWidget {
                         backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
                         backgroundColor: statusColor.withValues(alpha: 0.2),
                         child: photoUrl == null
-                            ? Text(name[0].toUpperCase(),
+                            ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
                                 style: TextStyle(
                                     color: statusColor, fontWeight: FontWeight.bold,
                                     fontSize: 18))

@@ -40,18 +40,27 @@ class AuthGateway extends StatelessWidget {
               return FutureBuilder<DocumentSnapshot>(
                 future: FirebaseFirestore.instance.collection('users').doc(snapshot.data!.uid).get(),
                 builder: (context, docSnapshot) {
-                  if (docSnapshot.connectionState == ConnectionState.waiting || !configSnapshot.hasData) {
+                  // Espera datos de user doc Y de config.
+                  // Si configSnapshot tiene error (ej. permisos denegados), se continúa
+                  // sin maintenance_mode para no bloquear a usuarios recién registrados.
+                  if (docSnapshot.connectionState == ConnectionState.waiting ||
+                      (!configSnapshot.hasData && !configSnapshot.hasError)) {
                     return const Scaffold(
+                      backgroundColor: Color(0xFF001F3F),
                       body: Center(child: CircularProgressIndicator(color: Color(0xFF00E5FF))),
                     );
                   }
                   
-                  final isMaintenance = (configSnapshot.data?.data() as Map<String, dynamic>?)?['maintenance_mode'] ?? false;
+                  // iOS fix: usar Map.from() para evitar crash con Map<Object?, Object?>
+                  final configRaw = configSnapshot.data?.data();
+                  final configData = configRaw != null ? Map<String, dynamic>.from(configRaw as Map) : <String, dynamic>{};
+                  final isMaintenance = configData['maintenance_mode'] ?? false;
                   String? role;
                   String? athleteDocId;
 
                   if (docSnapshot.hasData && docSnapshot.data!.exists) {
-                    final userData = docSnapshot.data!.data() as Map<String, dynamic>? ?? {};
+                    final userRaw = docSnapshot.data!.data();
+                    final userData = userRaw != null ? Map<String, dynamic>.from(userRaw as Map) : <String, dynamic>{};
                     role         = userData['role']         as String?;
                     athleteDocId = userData['athleteDocId'] as String?;
 
