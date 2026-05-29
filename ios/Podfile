@@ -54,6 +54,10 @@ post_install do |installer|
       # 3. Corrige el Deployment Target para evitar advertencias de versiones viejas
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
 
+      # 3b. FIX CRÍTICO XCODE 16: Desactivar el verificador de módulos de Clang
+      # Evita que el compilador aísle los encabezados de los Pods y falle al no heredar los paths de Flutter.
+      config.build_settings['CLANG_ENABLE_MODULE_VERIFIER'] = 'NO'
+
       # 4. Genera dSYM para todos los pods (evita warning "Upload Symbols Failed" de gRPC/Firestore)
       config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
 
