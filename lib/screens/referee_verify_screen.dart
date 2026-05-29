@@ -145,9 +145,9 @@ class _RefereeVerifyScreenState extends State<RefereeVerifyScreen> {
           height: 120,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: color.withOpacity(0.12),
+            color: color.withValues(alpha: 0.12),
             border: Border.all(color: color, width: 3),
-            boxShadow: [BoxShadow(color: color.withOpacity(0.35), blurRadius: 30, spreadRadius: 4)],
+            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 30, spreadRadius: 4)],
           ),
           child: Icon(icon, color: color, size: 64),
         ),
@@ -174,9 +174,9 @@ class _RefereeVerifyScreenState extends State<RefereeVerifyScreen> {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
+            color: Colors.white.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.12)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
           ),
           child: Row(
             children: [
@@ -196,7 +196,7 @@ class _RefereeVerifyScreenState extends State<RefereeVerifyScreen> {
                   // Overlay semitransparente — identidad visible pero no legible a distancia
                   Positioned.fill(
                     child: ClipOval(
-                      child: Container(color: Colors.black.withOpacity(0.25)),
+                      child: Container(color: Colors.black.withValues(alpha: 0.25)),
                     ),
                   ),
                 ],
@@ -253,7 +253,7 @@ class _RefereeVerifyScreenState extends State<RefereeVerifyScreen> {
     return Text(
       'Vista árbitro — nombre omitido por LOPDP Art. 5.\n'
       'Verificación criptográfica HMAC-SHA256 en servidor.',
-      style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10, height: 1.5),
+      style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 10, height: 1.5),
       textAlign: TextAlign.center,
     );
   }

@@ -160,7 +160,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
           Text(
             'Generando Rutina IA...',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
               fontSize: 18,
               fontWeight: FontWeight.bold,
               letterSpacing: 1.2,
@@ -224,7 +224,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -241,7 +241,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
                 Text(
                   'Marca cada ejercicio al finalizar para completar la sesión.',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
+                    color: Colors.white.withValues(alpha: 0.6),
                     fontSize: 14,
                   ),
                 ),
@@ -294,7 +294,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
               ),
             ),
             centerTitle: true,
-            background: Container(color: Colors.white.withOpacity(0.05)),
+            background: Container(color: Colors.white.withValues(alpha: 0.05)),
           ),
         ),
       ),
@@ -314,13 +314,13 @@ class _TrainingScreenState extends State<TrainingScreen> {
             duration: const Duration(milliseconds: 300),
             decoration: BoxDecoration(
               color: isDone
-                  ? Colors.white.withOpacity(0.05)
-                  : Colors.white.withOpacity(0.12),
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.white.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
                 color: isDone
-                    ? Colors.white.withOpacity(0.1)
-                    : Colors.white.withOpacity(0.2),
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.white.withValues(alpha: 0.2),
                 width: 1,
               ),
             ),
@@ -361,7 +361,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
                             exercise['desc'] ?? '',
                             style: TextStyle(
                               fontSize: 14,
-                              color: Colors.white.withOpacity(0.6),
+                              color: Colors.white.withValues(alpha: 0.6),
                               height: 1.4,
                             ),
                           ),
@@ -388,17 +388,17 @@ class _TrainingScreenState extends State<TrainingScreen> {
         shape: BoxShape.circle,
         color: isDone
             ? const Color(0xFF00E5FF)
-            : Colors.white.withOpacity(0.10),
+            : Colors.white.withValues(alpha: 0.10),
         border: Border.all(
           color: isDone
               ? const Color(0xFF00E5FF)
-              : Colors.white.withOpacity(0.3),
+              : Colors.white.withValues(alpha: 0.3),
           width: 1.5,
         ),
         boxShadow: isDone
             ? [
                 BoxShadow(
-                  color: const Color(0xFF00E5FF).withOpacity(0.3),
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.3),
                   blurRadius: 8,
                   spreadRadius: 1,
                 ),
@@ -428,14 +428,14 @@ class _TrainingScreenState extends State<TrainingScreen> {
                   const Color(0xFF00BFA5),
                 ] // Cyan gradient
               : [
-                  Colors.white.withOpacity(0.1),
-                  Colors.white.withOpacity(0.05),
+                  Colors.white.withValues(alpha: 0.1),
+                  Colors.white.withValues(alpha: 0.05),
                 ], // Glassy inactive
         ),
         boxShadow: ready
             ? [
                 BoxShadow(
-                  color: const Color(0xFF00E5FF).withOpacity(0.3),
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.3),
                   blurRadius: 15,
                   offset: const Offset(0, 6),
                 ),

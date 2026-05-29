@@ -10,12 +10,14 @@ import '../widgets/secure_qr_view.dart';
 /// `generateAttendanceToken` en el backend con HMAC-SHA256 + Master Key.
 /// El token rota cada 45 s y expira en el servidor (anti-replay).
 class QrGeneratorScreen extends StatelessWidget {
-  const QrGeneratorScreen({Key? key}) : super(key: key);
+  final String? athleteUid;
+
+  const QrGeneratorScreen({Key? key, this.athleteUid}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final athleteUid = user?.uid ?? '';
+    final targetAthleteUid = athleteUid ?? user?.uid ?? '';
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -53,15 +55,15 @@ class QrGeneratorScreen extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(32),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: Colors.white.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(32),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         width: 1.5,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           blurRadius: 20,
                           spreadRadius: 5,
                         ),
@@ -92,8 +94,8 @@ class QrGeneratorScreen extends StatelessWidget {
                         // SecureQRView invoca generateAttendanceToken en
                         // el backend. El token rota cada 45 s y se valida
                         // con HMAC-SHA256 + timingSafeEqual + anti-replay.
-                        if (athleteUid.isNotEmpty)
-                          SecureQRView(athleteUid: athleteUid)
+                        if (targetAthleteUid.isNotEmpty)
+                          SecureQRView(athleteUid: targetAthleteUid)
                         else
                           const Text(
                             'Error: sesión no válida',

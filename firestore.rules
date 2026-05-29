@@ -10,9 +10,7 @@ service cloud.firestore {
     // =========================================================================
 
     function isAuthenticated() {
-      // Use .get() to prevent 'undefined property' errors
-      return request.auth != null
-          && request.auth.token.get('consent_signed', false) == true;
+      return request.auth != null;
     }
 
     function isAdmin() {
@@ -38,6 +36,15 @@ service cloud.firestore {
 
     function isOwner(uid) {
       return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // Art. 26 LOPDP — Protección de menores: valida que el padre sea tutor
+    // legal del atleta consultando el campo childrenIds en su documento de usuario.
+    // El campo childrenIds es una lista de athleteIds escritos SOLO por Cloud Functions.
+    function isParentOfAthlete(athId) {
+      return isParent()
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+              .get('childrenIds', []).hasAll([athId]);
     }
 
     // Art. 5 LOPDP — Minimización: valida relación legítima entre el usuario
@@ -116,6 +123,22 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // COLECCIÓN: /tournaments
+    // =========================================================================
+    match /tournaments/{tournamentId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // =========================================================================
+    // COLECCIÓN: /tournament_matches
+    // =========================================================================
+    match /tournament_matches/{matchId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // =========================================================================
     // COLECCIÓN: /app_config
     // Configuración global (RBAC, Templates Push, etc.)
     // =========================================================================
@@ -160,10 +183,11 @@ service cloud.firestore {
     // =========================================================================
     match /athletes/{athId} {
 
-      // Lectura: owner (incluso sin firmar consentimiento para ver pantalla de bloqueo) | admin | coach de la misma institución.
+      // Lectura: owner | admin | coach de la misma institución | padre tutor legal.
       allow read: if (request.auth != null && request.auth.uid == athId)
                || isAdmin()
-               || (isCoach() && resource != null && sameInstitution(documentInstitution(resource.data)));
+               || (isCoach() && resource != null && sameInstitution(documentInstitution(resource.data)))
+               || isParentOfAthlete(athId);
 
       // Creación: solo admins (proceso de ingesta controlado o backoffice).
       // El cliente Flutter nunca crea registros de atletas directamente.
@@ -193,7 +217,8 @@ service cloud.firestore {
       match /sport_details/{sportId} {
         allow read:  if isOwner(athId)
                   || isAdmin()
-                  || (isCoach() && sameInstitution(athleteInstitution(athId)));
+                  || (isCoach() && sameInstitution(athleteInstitution(athId)))
+                  || isParentOfAthlete(athId);
         allow write: if isAdmin();
       }
 
@@ -203,8 +228,10 @@ service cloud.firestore {
       match /historial_entrenamientos/{sessionId} {
         allow read:   if isOwner(athId)
                    || isAdmin()
-                   || (isCoach() && sameInstitution(athleteInstitution(athId)));
-        allow create: if isAdmin()
+                   || (isCoach() && sameInstitution(athleteInstitution(athId)))
+                   || isParentOfAthlete(athId);
+        allow create: if isOwner(athId)
+                   || isAdmin()
                    || (isCoach() && sameInstitution(athleteInstitution(athId)));
         // Update y delete son operaciones de admin; el historial no se edita.
         allow update, delete: if isAdmin();
@@ -242,7 +269,7 @@ service cloud.firestore {
     match /attendance_logs/{logId} {
       allow read:   if isAdmin()
                  || isCoach()
-                 || isParent();
+                 || (isParent() && isParentOfAthlete(resource.data.athleteUid));
       allow create: if isAdmin() || isCoach();
       allow update, delete: if isAdmin();
     }
@@ -275,6 +302,16 @@ service cloud.firestore {
       allow read: if request.auth != null
                && (request.auth.uid == resource.data.uid || isAdmin());
       allow update, delete: if isAdmin();
+    }
+    // =========================================================================
+    // COLECCION: /parent_children
+    // Relación legal padre → [athleteIds] para restricción de acceso relacional.
+    // Art. 26 LOPDP — Protección de menores: solo admins (o Cloud Functions con
+    //   Admin SDK) pueden escribir esta relación. Los padres solo leen la suya.
+    // =========================================================================
+    match /parent_children/{parentUid} {
+      allow read:  if isOwner(parentUid) || isAdmin();
+      allow write: if isAdmin();
     }
   }
 }

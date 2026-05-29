@@ -157,6 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
       String message = loc.loginErrorGeneric;
       if (e.code == 'user-not-found') message = loc.loginErrorNotFound;
       if (e.code == 'wrong-password') message = loc.loginErrorWrongPass;
+      if (e.code == 'invalid-credential') message = 'Correo o contraseña incorrectos';
       if (e.code == 'email-already-in-use') message = loc.loginErrorEmailUsed;
       if (e.code == 'weak-password') message = loc.loginErrorWeakPass;
       if (e.code == 'operation-not-allowed') {
@@ -177,10 +178,10 @@ class _LoginScreenState extends State<LoginScreen> {
       labelStyle: const TextStyle(color: Colors.white70),
       prefixIcon: Icon(icon, color: Colors.white70),
       filled: true,
-      fillColor: Colors.white.withOpacity(0.1),
+      fillColor: Colors.white.withValues(alpha: 0.1),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
@@ -245,7 +246,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                         blurRadius: 30,
                         spreadRadius: 10,
                       )
@@ -273,10 +274,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(32.0),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
+                        color: Colors.white.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(32),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.2), 
+                          color: Colors.white.withValues(alpha: 0.2), 
                           width: 1.5,
                         ),
                       ),
@@ -362,12 +363,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(height: 24),
                           Row(
                             children: [
-                              Expanded(child: Divider(color: Colors.white.withOpacity(0.3))),
+                              Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.3))),
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 16),
                                 child: Text(loc.loginOr, style: const TextStyle(color: Colors.white70, fontSize: 12)),
                               ),
-                              Expanded(child: Divider(color: Colors.white.withOpacity(0.3))),
+                              Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.3))),
                             ],
                           ),
                           const SizedBox(height: 24),
@@ -417,8 +418,8 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          border: Border.all(color: Colors.white.withOpacity(0.3)),
+          color: Colors.white.withValues(alpha: 0.1),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(

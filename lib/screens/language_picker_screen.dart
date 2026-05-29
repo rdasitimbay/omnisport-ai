@@ -74,10 +74,10 @@ class LanguagePickerScreen extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(40.0),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
+                      color: Colors.white.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(32),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.2), 
+                        color: Colors.white.withValues(alpha: 0.2), 
                         width: 1.5,
                       ),
                     ),

@@ -5,11 +5,14 @@ import 'package:flutter/cupertino.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:app/models/athlete.dart';
 import '../services/offline_sync_service.dart';
+import '../services/rbac_service.dart';
 import 'referee_verify_screen.dart';
+
 
 enum ScanState {
   scanningAthlete,
@@ -33,11 +36,56 @@ class QrScannerScreen extends StatefulWidget {
 class _QrScannerScreenState extends State<QrScannerScreen> {
   MobileScannerController? _scannerController;
 
+  bool _checkingRole = true;
+  bool _authorized = false;
+
   @override
   void initState() {
     super.initState();
-    // No inicializar la cámara en test mode — MobileScannerController accede
-    // al plugin nativo que no está disponible en el entorno de test headless.
+    _checkSecurityRole();
+  }
+
+  Future<void> _checkSecurityRole() async {
+    if (widget.isTestMode) {
+      setState(() {
+        _checkingRole = false;
+        _authorized = true;
+      });
+      _initScannerController();
+      return;
+    }
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          final role = RbacService.normalize(doc.data()?['role'] as String?);
+          if (RbacService.canManageAthletes(role)) {
+            if (mounted) {
+              setState(() {
+                _authorized = true;
+                _checkingRole = false;
+              });
+            }
+            _initScannerController();
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error al validar rol de seguridad: $e");
+    }
+
+    if (mounted) {
+      setState(() {
+        _checkingRole = false;
+        _authorized = false;
+      });
+    }
+  }
+
+  void _initScannerController() {
     if (!widget.isTestMode) {
       _scannerController = MobileScannerController(
         detectionSpeed: DetectionSpeed.normal,
@@ -266,12 +314,13 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   }
 
   void _logAccess(String uid, String method) {
-    final timestamp = DateTime.now().toIso8601String();
+    final clientMs = DateTime.now().millisecondsSinceEpoch;
     final logData = {
       'sync_type': 'access_log',
-      'uid': uid,
-      'timestamp': timestamp,
-      'method': method,
+      'athleteId': uid,
+      'scannedByUid': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
+      'eventType': _isEntry ? 'ENTRY' : 'EXIT',
+      'clientMs': clientMs,
     };
 
     // Fuego y olvido: guardar localmente e intentar sincronizar
@@ -319,6 +368,106 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_checkingRole) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0A192F),
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+              colors: [Color(0xFF001F3F), Color(0xFF0A192F)],
+            ),
+          ),
+          child: const Center(
+            child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+          ),
+        ),
+      );
+    }
+
+    if (!_authorized) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0A192F),
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text('Acceso Denegado', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+              colors: [Color(0xFF001F3F), Color(0xFF0A192F)],
+            ),
+          ),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32.0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                  child: Container(
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3), width: 1.5),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.gavel_rounded, color: Colors.redAccent, size: 48),
+                        ),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'Seguridad Zero Trust',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Solo el personal autorizado (Entrenador / Administrador) puede iniciar el escáner de control de acceso.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Tu intento de acceso ha sido denegado y auditado por seguridad (Art. 10 LOPDP).',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.4),
+                        ),
+                        const SizedBox(height: 28),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withValues(alpha: 0.1),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Volver al Portal', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -349,7 +498,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
           // Overlay Oscurecido para enfoque
           Container(
-            decoration: BoxDecoration(color: Colors.black.withOpacity(0.4)),
+            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4)),
           ),
 
           // Viewport del Scanner
@@ -362,7 +511,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 borderRadius: BorderRadius.circular(32),
                 boxShadow: [
                   BoxShadow(
-                    color: _getNeonColor().withOpacity(0.3),
+                    color: _getNeonColor().withValues(alpha: 0.3),
                     blurRadius: 20,
                     spreadRadius: 2,
                   ),
@@ -486,12 +635,12 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.12),
+              color: Colors.white.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(32),
-              border: Border.all(color: neonColor.withOpacity(0.6), width: 1.5),
+              border: Border.all(color: neonColor.withValues(alpha: 0.6), width: 1.5),
               boxShadow: [
                 BoxShadow(
-                  color: neonColor.withOpacity(0.15),
+                  color: neonColor.withValues(alpha: 0.15),
                   blurRadius: 20,
                   spreadRadius: 0,
                 ),
@@ -509,7 +658,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   Widget _buildSkeletonLoader(Color neonColor) {
     return Shimmer.fromColors(
       baseColor: Colors.white30,
-      highlightColor: neonColor.withOpacity(0.6),
+      highlightColor: neonColor.withValues(alpha: 0.6),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -538,9 +687,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: baseNeonColor.withOpacity(0.15),
+              color: baseNeonColor.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: baseNeonColor.withOpacity(0.5)),
+              border: Border.all(color: baseNeonColor.withValues(alpha: 0.5)),
             ),
             child: Text(
               _message,
@@ -622,7 +771,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 border: Border.all(color: finalNeonColor, width: 2),
                 boxShadow: [
                   BoxShadow(
-                    color: finalNeonColor.withOpacity(0.3),
+                    color: finalNeonColor.withValues(alpha: 0.3),
                     blurRadius: 15,
                   ),
                 ],
@@ -657,7 +806,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 child: Text(
                   model.teamOrCategory.toUpperCase(),
                   style: TextStyle(
-                    color: finalNeonColor.withOpacity(0.8),
+                    color: finalNeonColor.withValues(alpha: 0.8),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 1.2,
@@ -668,9 +817,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: finalNeonColor.withOpacity(0.15),
+                color: finalNeonColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: finalNeonColor.withOpacity(0.5)),
+                border: Border.all(color: finalNeonColor.withValues(alpha: 0.5)),
               ),
               child: Text(
                 _currentState == ScanState.success ? displayStatus : _message,

@@ -5,7 +5,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_screen.dart';
 import 'dashboard_screen.dart';
 import 'admin_dashboard_screen.dart';
+import 'admin_mobile_dashboard_screen.dart';
 import 'parent_dashboard_screen.dart';
+import 'coach_dashboard_screen.dart';
+import '../services/rbac_service.dart';
+
 
 class AuthGateway extends StatelessWidget {
   const AuthGateway({super.key});
@@ -61,14 +65,59 @@ class AuthGateway extends StatelessWidget {
                   if (docSnapshot.hasData && docSnapshot.data!.exists) {
                     final userRaw = docSnapshot.data!.data();
                     final userData = userRaw != null ? Map<String, dynamic>.from(userRaw as Map) : <String, dynamic>{};
-                    role         = userData['role']         as String?;
+                    // Normalizar rol: 'user' y vacío → 'athlete' (USR-ROL v2)
+                    final rawRole = userData['role'] as String?;
+                    role         = RbacService.normalize(rawRole);
                     athleteDocId = userData['athleteDocId'] as String?;
+                    final isActive = userData['isActive'] ?? true;
 
-                    if (role == 'admin' && kIsWeb) {
-                      return const AdminDashboardScreen(institutionId: 'inst_piloto_stresstest');
+                    if (!isActive) {
+                      return Scaffold(
+                        backgroundColor: const Color(0xFF001F3F),
+                        body: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.block, size: 80, color: Colors.redAccent),
+                              const SizedBox(height: 20),
+                              const Text('Acceso Denegado',
+                                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 10),
+                              const Text('Tu cuenta ha sido dada de baja o está inactiva.\nComunícate con administración.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.white70)),
+                              const SizedBox(height: 30),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                                onPressed: () => FirebaseAuth.instance.signOut(),
+                                child: const Text('Volver al Login', style: TextStyle(color: Colors.white)),
+                              )
+                            ],
+                          ),
+                        ),
+                      );
                     }
-                    if (role == 'parent') {
+
+                    // RBAC USR-ROL: Admin
+                    // Web → AdminDashboardScreen completo (backoffice)
+                    // Móvil → AdminMobileDashboardScreen simplificado
+                    if (role == RbacService.roleAdmin) {
+                      return kIsWeb
+                          ? const AdminDashboardScreen(institutionId: 'inst_piloto_stresstest')
+                          : const AdminMobileDashboardScreen();
+                    }
+                    // RBAC USR-ROL: Padre de familia
+                    // Acceso restringido a datos de sus tutorados (childrenIds en Firestore)
+                    if (role == RbacService.roleParent) {
                       return ParentDashboardScreen(parentUid: snapshot.data!.uid);
+                    }
+                    // RBAC USR-ROL: Coach
+                    // Filtro automático por institutionId/coachId en queries
+                    if (role == RbacService.roleCoach) {
+                      return CoachDashboardScreen(
+                        coachUid: snapshot.data!.uid,
+                        institutionId: userData['institutionId'] ?? 'inst_piloto_stresstest',
+                      );
                     }
                   }
 

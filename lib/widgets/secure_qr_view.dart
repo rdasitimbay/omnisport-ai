@@ -2,11 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class SecureQRView extends StatefulWidget {
   final String athleteUid;
 
-  const SecureQRView({Key? key, required this.athleteUid}) : super(key: key);
+  const SecureQRView({super.key, required this.athleteUid});
 
   @override
   State<SecureQRView> createState() => _SecureQRViewState();
@@ -24,17 +27,37 @@ class _SecureQRViewState extends State<SecureQRView> {
   Stream<String> _generateTokenStream() async* {
     while (true) {
       try {
-        final result = await FirebaseFunctions.instance
-            .httpsCallable('generateAttendanceToken')
-            .call({'athleteUid': widget.athleteUid});
+        final user = FirebaseAuth.instance.currentUser;
+        if (user == null) {
+          yield 'ERROR:unauthenticated';
+          await Future.delayed(const Duration(seconds: 45));
+          continue;
+        }
+        
+        final idToken = await user.getIdToken();
+        final url = Uri.parse('https://us-central1-omnisport-ai.cloudfunctions.net/generateAttendanceToken');
+        
+        final response = await http.post(
+          url,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $idToken',
+          },
+          body: jsonEncode({
+            'data': {'athleteUid': widget.athleteUid}
+          }),
+        );
 
-        final token = result.data is Map
-            ? result.data['token'] as String?
-            : null;
-        if (token != null && token.isNotEmpty) {
-          yield token;
+        if (response.statusCode == 200) {
+          final body = jsonDecode(response.body);
+          final token = body['result']?['token'] as String?;
+          if (token != null && token.isNotEmpty) {
+            yield token;
+          } else {
+            yield 'ERROR:token_empty';
+          }
         } else {
-          yield 'ERROR:token_empty';
+          yield 'ERROR:http_${response.statusCode}';
         }
       } catch (e) {
         debugPrint('Error generating attendance token: $e');
@@ -114,6 +137,7 @@ class _SecureQRViewState extends State<SecureQRView> {
                 data: token,
                 version: QrVersions.auto,
                 size: 250.0,
+                backgroundColor: Colors.white,
                 eyeStyle: const QrEyeStyle(
                   eyeShape: QrEyeShape.square,
                   color: Color(0xFF0A192F),

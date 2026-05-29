@@ -5,10 +5,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'attendance_history_screen.dart';
+import 'tablas_screen.dart';
+import 'qr_generator_screen.dart';
+import 'lopdp_vault_screen.dart';
 
 /// Vista del representante (rol: parent).
 /// Muestra en tiempo real el estado de presencia de cada hijo vinculado
-/// al parentUid, más el historial reciente de entradas/salidas.
+/// a través de la relación de /parent_children/{parentUid}, más las
+/// acciones rápidas y estadísticas de rendimiento en tiempo real.
 class ParentDashboardScreen extends StatelessWidget {
   final String parentUid;
 
@@ -43,36 +47,62 @@ class ParentDashboardScreen extends StatelessWidget {
           ),
         ),
         child: SafeArea(
-          child: StreamBuilder<QuerySnapshot>(
+          child: StreamBuilder<DocumentSnapshot>(
             stream: FirebaseFirestore.instance
-                .collection('athletes')
-                .where('parentUid', isEqualTo: parentUid)
+                .collection('parent_children')
+                .doc(parentUid)
                 .snapshots(),
-            builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
+            builder: (context, parentSnap) {
+              if (parentSnap.connectionState == ConnectionState.waiting) {
                 return const Center(
                     child: CircularProgressIndicator(color: Color(0xFF00E5FF)));
               }
-              if (!snap.hasData || snap.data!.docs.isEmpty) {
+              if (!parentSnap.hasData || !parentSnap.data!.exists) {
                 return _buildEmpty(context);
               }
-              final athletes = snap.data!.docs;
-              return ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                children: [
-                  _buildWelcomeHeader(),
-                  const SizedBox(height: 16),
-                  ...athletes.map((doc) => _ChildCard(
-                    athleteDoc: doc,
-                    onViewHistory: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => AttendanceHistoryScreen(
-                        athleteUid:  doc.id,
-                        athleteName: (doc.data() as Map)['full_name'] as String? ?? 'Atleta',
+              final parentData = parentSnap.data!.data() as Map<String, dynamic>?;
+              final childrenIds = List<String>.from(parentData?['childrenIds'] ?? []);
+              if (childrenIds.isEmpty) {
+                return _buildEmpty(context);
+              }
+
+              return StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('athletes')
+                    .where(FieldPath.documentId, whereIn: childrenIds)
+                    .snapshots(),
+                builder: (context, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                        child: CircularProgressIndicator(color: Color(0xFF00E5FF)));
+                  }
+                  if (!snap.hasData || snap.data!.docs.isEmpty) {
+                    return _buildEmpty(context);
+                  }
+                  final athletes = snap.data!.docs;
+                  return ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    children: [
+                      _buildWelcomeHeader(),
+                      const SizedBox(height: 16),
+                      
+                      // ── ⚡ Acciones Rápidas (Parent) ──
+                      _buildParentQuickActions(context, athletes),
+                      const SizedBox(height: 16),
+                      
+                      ...athletes.map((doc) => _ChildCard(
+                        athleteDoc: doc,
+                        onViewHistory: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => AttendanceHistoryScreen(
+                            athleteUid:  doc.id,
+                            athleteName: (doc.data() as Map)['full_name'] as String? ?? 'Atleta',
+                          )),
+                        ),
                       )),
-                    ),
-                  )),
-                ],
+                    ],
+                  );
+                },
               );
             },
           ),
@@ -113,6 +143,237 @@ class ParentDashboardScreen extends StatelessWidget {
                   style: TextStyle(color: Colors.white38, fontSize: 12)),
             ]),
           ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildParentQuickActions(BuildContext context, List<QueryDocumentSnapshot> athletes) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '⚡ Acciones Rápidas',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _parentActionButton(
+                      icon: Icons.emoji_events,
+                      label: 'Torneos',
+                      subtitle: 'Fixtures',
+                      color: const Color(0xFFFFB300),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const TablasScreen()),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _parentActionButton(
+                      icon: CupertinoIcons.barcode_viewfinder,
+                      label: 'Identidad',
+                      subtitle: 'QR Deportista',
+                      color: Colors.greenAccent,
+                      onTap: () => _openQrForChild(context, athletes),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _parentActionButton(
+                      icon: Icons.shield_rounded,
+                      label: 'Privacidad',
+                      subtitle: 'Bóveda LOPDP',
+                      color: const Color(0xFF00E5FF),
+                      onTap: () => _openLopdpForChild(context, athletes),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _parentActionButton({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.1),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, size: 20, color: color),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 9,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openQrForChild(BuildContext context, List<QueryDocumentSnapshot> athletes) {
+    if (athletes.isEmpty) return;
+    if (athletes.length == 1) {
+      final doc = athletes.first;
+      Navigator.push(context, MaterialPageRoute(builder: (_) => QrGeneratorScreen(athleteUid: doc.id)));
+      return;
+    }
+    _showChildSelector(
+      context,
+      athletes,
+      'Generar QR de Acceso',
+      (doc) => Navigator.push(context, MaterialPageRoute(builder: (_) => QrGeneratorScreen(athleteUid: doc.id))),
+    );
+  }
+
+  void _openLopdpForChild(BuildContext context, List<QueryDocumentSnapshot> athletes) {
+    if (athletes.isEmpty) return;
+    if (athletes.length == 1) {
+      final doc = athletes.first;
+      final name = (doc.data() as Map)['full_name'] as String? ?? 'Atleta';
+      Navigator.push(context, MaterialPageRoute(builder: (_) => LopdpVaultScreen(athleteUid: doc.id, athleteName: name)));
+      return;
+    }
+    _showChildSelector(
+      context,
+      athletes,
+      'Bóveda de Privacidad LOPDP',
+      (doc) {
+        final name = (doc.data() as Map)['full_name'] as String? ?? 'Atleta';
+        Navigator.push(context, MaterialPageRoute(builder: (_) => LopdpVaultScreen(athleteUid: doc.id, athleteName: name)));
+      },
+    );
+  }
+
+  void _showChildSelector(
+    BuildContext context,
+    List<QueryDocumentSnapshot> athletes,
+    String title,
+    void Function(QueryDocumentSnapshot) onSelected,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0D1B3E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: athletes.map((doc) {
+                    final name = (doc.data() as Map)['full_name'] as String? ?? 'Sin nombre';
+                    final category = (doc.data() as Map)['teamOrCategory'] as String? ?? '';
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.04),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.white12),
+                        ),
+                        child: ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white12,
+                            ),
+                            child: const Icon(CupertinoIcons.person_fill, color: Color(0xFF00E5FF)),
+                          ),
+                          title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                          subtitle: Text(category, style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            onSelected(doc);
+                          },
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -323,6 +584,175 @@ class _ChildCard extends StatelessWidget {
                       ),
                     ),
 
+                  // ── Rendimiento y Entrenamientos (Read-Only) ─────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('athletes')
+                          .doc(uid)
+                          .collection('historial_entrenamientos')
+                          .orderBy('fecha', descending: true)
+                          .limit(3)
+                          .snapshots(),
+                      builder: (context, sessSnap) {
+                        final sessions = sessSnap.data?.docs ?? [];
+                        if (sessSnap.connectionState == ConnectionState.waiting) {
+                          return const SizedBox(
+                            height: 40,
+                            child: Center(
+                              child: SizedBox(
+                                width: 16, height: 16,
+                                child: CircularProgressIndicator(color: Color(0xFF00E5FF), strokeWidth: 2),
+                              ),
+                            ),
+                          );
+                        }
+
+                        if (sessions.isEmpty) {
+                          return Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.03),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.info_outline, color: Colors.white30, size: 16),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Sin entrenamientos o métricas de rendimiento reportados recientemente.',
+                                    style: TextStyle(color: Colors.white30, fontSize: 11, height: 1.3),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(CupertinoIcons.graph_circle_fill, color: Colors.purpleAccent, size: 14),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Historial de Rendimiento',
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ...sessions.map((sess) {
+                              final sData = sess.data() as Map<String, dynamic>;
+                              final titulo = sData['titulo'] ?? 'Sesión de Entreno';
+                              final duracion = sData['duracion'] ?? 90;
+                              final intensidad = (sData['intensidad'] ?? 'MEDIA').toString().toUpperCase();
+                              final observaciones = sData['observaciones'] ?? '';
+                              final fechaTs = sData['fecha'] as Timestamp?;
+                              final fechaStr = fechaTs != null
+                                  ? DateFormat('dd MMM').format(fechaTs.toDate())
+                                  : 'Hoy';
+
+                              Color colorIntensidad = const Color(0xFFFFB300);
+                              if (intensidad == 'BAJA') colorIntensidad = const Color(0xFF00E676);
+                              if (intensidad == 'ALTA') colorIntensidad = const Color(0xFFFF1744);
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 6.0),
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.03),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              titulo.toString().toUpperCase(),
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 11,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            fechaStr,
+                                            style: const TextStyle(color: Colors.white38, fontSize: 10),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          const Icon(CupertinoIcons.stopwatch, color: Colors.white38, size: 12),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '$duracion min',
+                                            style: const TextStyle(color: Colors.white38, fontSize: 10),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: colorIntensidad.withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              'INTENSIDAD: $intensidad',
+                                              style: TextStyle(
+                                                color: colorIntensidad,
+                                                fontSize: 8,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      if (observaciones.isNotEmpty) ...[
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          observaciones,
+                                          style: const TextStyle(
+                                            color: Colors.white54,
+                                            fontSize: 10,
+                                            fontStyle: FontStyle.italic,
+                                            height: 1.3,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+
                   // ── Botón de historial ───────────────────────────────
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -337,7 +767,7 @@ class _ChildCard extends StatelessWidget {
                           border: Border.all(color: Colors.white12),
                         ),
                         child: const Center(
-                          child: Text('Ver historial completo',
+                          child: Text('Ver bitácora de asistencias',
                               style: TextStyle(color: Colors.white54, fontSize: 12,
                                   fontWeight: FontWeight.w600)),
                         ),

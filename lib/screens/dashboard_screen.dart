@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firestore_service.dart';
+import '../services/rbac_service.dart';
+import '../widgets/role_gate.dart';
 import 'training_screen.dart';
+import 'velocity_kinetic/kinetic_lab_screen.dart';
 import 'profile_screen.dart';
 import 'tablas_screen.dart';
 import 'qr_generator_screen.dart';
@@ -81,31 +84,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(32),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.white.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: const Color(0xFF00E5FF).withOpacity(0.5),
+                            color: const Color(0xFF00E5FF).withValues(alpha: 0.5),
                             width: 1.5,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF00E5FF).withOpacity(0.2),
+                              color: const Color(0xFF00E5FF).withValues(alpha: 0.2),
                               blurRadius: 20,
                               spreadRadius: 2,
                             ),
                           ],
                         ),
-                        child: const Column(
+                        child: Column(
                           mainAxisSize: MainAxisSize.min,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.person_off_outlined,
                               size: 64,
                               color: Color(0xFF00E5FF),
                             ),
-                            SizedBox(height: 16),
-                            Text(
+                            const SizedBox(height: 16),
+                            const Text(
                               'Perfil no configurado',
                               style: TextStyle(
                                 color: Colors.white,
@@ -114,8 +117,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            SizedBox(height: 12),
-                            Text(
+                            const SizedBox(height: 12),
+                            const Text(
                               'Tu cuenta requiere el consentimiento de tu tutor legal (LOPDP).\nContacta al administrador de tu institución.',
                               style: TextStyle(
                                 color: Colors.white70,
@@ -123,6 +126,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 height: 1.5,
                               ),
                               textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 24),
+                            OutlinedButton.icon(
+                              onPressed: () => FirebaseAuth.instance.signOut(),
+                              icon: const Icon(Icons.logout, color: Colors.white),
+                              label: const Text('Cerrar sesión', style: TextStyle(color: Colors.white)),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.white30),
+                              ),
                             ),
                           ],
                         ),
@@ -147,6 +159,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             athleteData['disciplina'] ??
             'Sin disciplina';
 
+        // Cargar el rol del usuario autenticado para RoleGate.
+        // Se hace una sola consulta con FutureBuilder anidado en la sección protegida.
         return Scaffold(
           extendBody: true,
           extendBodyBehindAppBar: true,
@@ -182,71 +196,90 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildWelcomeCard(
-                        nombre,
-                        sport,
-                        athleteData['photoBase64'],
-                      ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        "Acciones Rápidas",
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildQuickActions(athleteDoc.id, nombre, sport),
-                      const SizedBox(height: 24),
-                      const Text(
-                        "Identidad Digital",
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildPassportBanner(athleteDoc.id, nombre),
-                      const SizedBox(height: 24),
-                      const Text(
-                        "Privacidad",
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildLopdpVaultBanner(athleteDoc.id, nombre),
-                      const SizedBox(height: 24),
-                      _buildSessionAttendanceBanner(user?.uid),
-                      const Text(
-                        "Staff Tools (Demo)",
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildStaffActions(nombre),
-                      const SizedBox(height: 24),
-                      const Text(
-                        "Rendimiento",
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildWeeklyPerformance(athleteDoc.id),
-                    ],
+                  child: FutureBuilder<DocumentSnapshot>(
+                    // Carga el rol del usuario una sola vez (no es un stream — el rol es estable durante la sesión).
+                    future: user != null
+                        ? FirebaseFirestore.instance.collection('users').doc(user.uid).get()
+                        : FirebaseFirestore.instance.collection('_dummy_').doc('_dummy_').get(),
+                    builder: (context, userSnap) {
+                      final rawData = userSnap.data?.data();
+                      final userData = rawData != null
+                          ? Map<String, dynamic>.from(rawData as Map)
+                          : <String, dynamic>{};
+                      final userRole = RbacService.normalize(userData['role'] as String?);
+                      final institutionId = userData['institutionId'] as String? ?? 'inst_piloto_stresstest';
+                      final coachName    = userData['displayName'] as String? ?? 'Coach';
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // ── Bienvenida ────────────────────────────────────
+                          _buildWelcomeCard(nombre, sport, athleteData['photoBase64']),
+                          const SizedBox(height: 24),
+
+                          // ── ⚡ Acciones Rápidas (Atleta) ──────────────────
+                          // Requerimiento: Entreno · Acceso (QR) · Torneos
+                          _buildSectionHeader('Acciones Rápidas'),
+                          const SizedBox(height: 16),
+                          _buildQuickActions(athleteDoc.id, nombre, sport),
+                          const SizedBox(height: 24),
+
+                          // ── Identidad Digital ─────────────────────────────
+                          _buildSectionHeader('Identidad Digital'),
+                          const SizedBox(height: 16),
+                          _buildPassportBanner(athleteDoc.id, nombre),
+                          const SizedBox(height: 24),
+
+                          // ── Rendimiento ───────────────────────────────────
+                          _buildSectionHeader('Rendimiento'),
+                          const SizedBox(height: 16),
+                          _buildWeeklyPerformance(athleteDoc.id),
+                          const SizedBox(height: 24),
+                          _buildKineticLabBanner(athleteDoc.id, nombre, sport),
+                          const SizedBox(height: 24),
+
+                          // ── Privacidad ────────────────────────────────────
+                          _buildSectionHeader('Privacidad'),
+                          const SizedBox(height: 16),
+                          _buildLopdpVaultBanner(athleteDoc.id, nombre),
+                          const SizedBox(height: 24),
+
+                          // ── Panel de Sesión (SOLO coach / admin) ──────────
+                          // RoleGate: si el usuario es atleta puro, esta sección
+                          // NO se renderiza — cero memoria, cero excepción 403.
+                          RoleGate(
+                            currentRole: userRole,
+                            allowedRoles: [RbacService.roleCoach, RbacService.roleAdmin],
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildSectionHeader('Panel de Sesión'),
+                                const SizedBox(height: 16),
+                                _buildSessionAttendanceBanner(user?.uid, institutionId, coachName),
+                              ],
+                            ),
+                          ),
+
+                          // ── Staff Tools (SOLO coach / admin) ──────────────
+                          // Zero Trust · Historial · S.O.S
+                          // RBAC: role athlete NUNCA ve estas herramientas.
+                          RoleGate(
+                            currentRole: userRole,
+                            allowedRoles: [RbacService.roleCoach, RbacService.roleAdmin],
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const SizedBox(height: 8),
+                                _buildSectionHeader('Staff · Zero Trust'),
+                                const SizedBox(height: 16),
+                                _buildStaffActions(nombre),
+                                const SizedBox(height: 24),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -264,6 +297,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // ── Encabezado de sección reutilizable ────────────────────────────────────
+  Widget _buildSectionHeader(String label) {
+    return Text(
+      label,
+      style: const TextStyle(
+        color: Colors.white70,
+        fontWeight: FontWeight.bold,
+        fontSize: 18,
+      ),
+    );
+  }
+
   Widget _buildWelcomeCard(String nombre, String sport, String? photoBase64) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(32),
@@ -272,10 +317,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Container(
           padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.15),
+            color: Colors.white.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(32),
             border: Border.all(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               width: 1.5,
             ),
           ),
@@ -288,12 +333,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: Colors.white.withOpacity(0.5),
+                    color: Colors.white.withValues(alpha: 0.5),
                     width: 2,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       blurRadius: 15,
                       spreadRadius: 2,
                     ),
@@ -342,10 +387,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.white.withValues(alpha: 0.1),
                         ),
                       ),
                       child: Row(
@@ -519,15 +564,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFF0D1B3E).withOpacity(0.9),
-                  const Color(0xFF0A2A5C).withOpacity(0.85),
+                  const Color(0xFF0D1B3E).withValues(alpha: 0.9),
+                  const Color(0xFF0A2A5C).withValues(alpha: 0.85),
                 ],
               ),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.35), width: 1.2),
+              border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.35), width: 1.2),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF00E5FF).withOpacity(0.15),
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.15),
                   blurRadius: 20, spreadRadius: 1,
                 ),
               ],
@@ -538,8 +583,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: const Color(0xFF00E5FF).withOpacity(0.12),
-                    border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.4)),
+                    color: const Color(0xFF00E5FF).withValues(alpha: 0.12),
+                    border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.4)),
                   ),
                   child: const Icon(Icons.badge_rounded, color: Color(0xFF00E5FF), size: 28),
                 ),
@@ -552,6 +597,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
                       SizedBox(height: 3),
                       Text('Credencial Smart ID · Modo Offline disponible',
+                          style: TextStyle(color: Colors.white54, fontSize: 11)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios, color: Color(0xFF00E5FF), size: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKineticLabBanner(String athleteId, String nombre, String sport) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => KineticLabScreen(
+            athleteId: athleteId,
+            athleteName: nombre,
+            sport: sport,
+          ),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF003F87).withValues(alpha: 0.9),
+                  const Color(0xFF0056B3).withValues(alpha: 0.85),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.4), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.18),
+                  blurRadius: 20, spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF00E5FF).withValues(alpha: 0.12),
+                    border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.4)),
+                  ),
+                  child: const Icon(CupertinoIcons.bolt_fill, color: Color(0xFF00E5FF), size: 28),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Kinetic Lab · Core de IA',
+                          style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                      SizedBox(height: 3),
+                      Text('Telemetría deportiva y Gemini Biometric Review',
                           style: TextStyle(color: Colors.white54, fontSize: 11)),
                     ],
                   ),
@@ -587,16 +701,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFF1A0A3E).withOpacity(0.9),
-                  const Color(0xFF2A0A5C).withOpacity(0.85),
+                  const Color(0xFF1A0A3E).withValues(alpha: 0.9),
+                  const Color(0xFF2A0A5C).withValues(alpha: 0.85),
                 ],
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                  color: Colors.purpleAccent.withOpacity(0.35), width: 1.2),
+                  color: Colors.purpleAccent.withValues(alpha: 0.35), width: 1.2),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.purpleAccent.withOpacity(0.12),
+                  color: Colors.purpleAccent.withValues(alpha: 0.12),
                   blurRadius: 20, spreadRadius: 1,
                 ),
               ],
@@ -607,9 +721,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.purpleAccent.withOpacity(0.12),
+                    color: Colors.purpleAccent.withValues(alpha: 0.12),
                     border: Border.all(
-                        color: Colors.purpleAccent.withOpacity(0.4)),
+                        color: Colors.purpleAccent.withValues(alpha: 0.4)),
                   ),
                   child: const Icon(Icons.shield_rounded,
                       color: Colors.purpleAccent, size: 28),
@@ -641,93 +755,66 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Visible solo para coach y admin — carga el rol del usuario desde Firestore.
-  Widget _buildSessionAttendanceBanner(String? uid) {
+  // Panel de sesión de asistencia — exclusivo coach/admin.
+  // La verificación de rol es responsabilidad del RoleGate en el caller.
+  // Recibe los parámetros ya resueltos para evitar doble Firestore read.
+  Widget _buildSessionAttendanceBanner(String? uid, String institutionId, String coachName) {
     if (uid == null) return const SizedBox.shrink();
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('users').doc(uid).get(),
-      builder: (context, snap) {
-        if (!snap.hasData) return const SizedBox.shrink();
-        // iOS fix: Firestore puede retornar Map<Object?, Object?> en lugar de
-        // Map<String, dynamic>. Usamos Map.from() para conversión segura.
-        final rawData = snap.data!.data();
-        final data = rawData != null
-            ? Map<String, dynamic>.from(rawData as Map)
-            : null;
-        final role          = data?['role']          as String?;
-        final institutionId = data?['institutionId'] as String?;
-        final coachName     = data?['displayName']   as String? ?? 'Coach';
-        if (role != 'coach' && role != 'admin') return const SizedBox.shrink();
-        final instId = institutionId ?? 'inst_piloto_stresstest';
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Panel de Sesión',
-                  style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold,
-                      fontSize: 18)),
-              const SizedBox(height: 16),
-              GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => SessionAttendanceScreen(
-                      institutionId: instId,
-                      coachName:     coachName,
-                    ),
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft, end: Alignment.bottomRight,
-                          colors: [
-                            const Color(0xFF00E5FF).withOpacity(0.12),
-                            Colors.amber.withOpacity(0.08),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: const Color(0xFF00E5FF).withOpacity(0.35), width: 1.2),
-                      ),
-                      child: Row(children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(0xFF00E5FF).withOpacity(0.15),
-                          ),
-                          child: const Icon(Icons.fact_check_rounded,
-                              color: Color(0xFF00E5FF), size: 28),
-                        ),
-                        const SizedBox(width: 16),
-                        const Expanded(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text('Panel de Asistencia en Vivo',
-                                style: TextStyle(color: Colors.white, fontSize: 15,
-                                    fontWeight: FontWeight.bold)),
-                            SizedBox(height: 3),
-                            Text('Presentes · Ausentes · Marcado manual',
-                                style: TextStyle(color: Colors.white54, fontSize: 11)),
-                          ]),
-                        ),
-                        const Icon(Icons.arrow_forward_ios,
-                            color: Color(0xFF00E5FF), size: 16),
-                      ]),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SessionAttendanceScreen(
+            institutionId: institutionId,
+            coachName:     coachName,
           ),
-        );
-      },
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF00E5FF).withValues(alpha: 0.12),
+                  Colors.amber.withValues(alpha: 0.08),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.35), width: 1.2),
+            ),
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.15),
+                ),
+                child: const Icon(Icons.fact_check_rounded,
+                    color: Color(0xFF00E5FF), size: 28),
+              ),
+              const SizedBox(width: 16),
+              const Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Panel de Asistencia en Vivo',
+                      style: TextStyle(color: Colors.white, fontSize: 15,
+                          fontWeight: FontWeight.bold)),
+                  SizedBox(height: 3),
+                  Text('Presentes · Ausentes · Marcado manual',
+                      style: TextStyle(color: Colors.white54, fontSize: 11)),
+                ]),
+              ),
+              const Icon(Icons.arrow_forward_ios,
+                  color: Color(0xFF00E5FF), size: 16),
+            ]),
+          ),
+        ),
+      ),
     );
   }
 
@@ -747,10 +834,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: Colors.white.withOpacity(0.15),
+                color: Colors.white.withValues(alpha: 0.15),
                 width: 1,
               ),
             ),
@@ -760,7 +847,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.1),
+                    color: iconColor.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(icon, size: 32, color: iconColor),
@@ -803,9 +890,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white.withOpacity(0.15)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                 ),
                 child: Column(
                   children: [
@@ -828,7 +915,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       "El primer paso es empezar. ¡Ve a la sección Entreno y comienza a sudar la camiseta!",
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.6),
+                        color: Colors.white.withValues(alpha: 0.6),
                         fontSize: 14,
                       ),
                     ),
@@ -846,9 +933,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: Colors.white.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withOpacity(0.15)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -939,12 +1026,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ), // Aumentamos un poco el blur
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(
+              color: Colors.white.withValues(alpha: 
                 0.03,
               ), // Menos opacidad para el 'cristal'
               border: Border(
                 top: BorderSide(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   width: 0.5,
                 ),
               ),
@@ -956,7 +1043,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               type: BottomNavigationBarType.fixed,
               iconSize: 28, // Mayor presencia visual en el cristal
               selectedItemColor: const Color(0xFF00E5FF), // Cian Eléctrico
-              unselectedItemColor: Colors.white.withOpacity(
+              unselectedItemColor: Colors.white.withValues(alpha: 
                 0.6,
               ), // Ajuste a 0.6 para no verse apagados
               selectedLabelStyle: const TextStyle(
@@ -965,20 +1052,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               unselectedLabelStyle: TextStyle(
                 fontSize: 12,
-                color: Colors.white.withOpacity(0.6),
+                color: Colors.white.withValues(alpha: 0.6),
               ),
               onTap: (index) {
                 if (index == 0) return;
                 if (index == 1) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => TrainingScreen(
-                        athleteId: athleteId,
-                        athleteName: nombre,
-                        sport: sport,
-                      ),
-                    ),
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: Colors.transparent,
+                    builder: (ctx) {
+                      return BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF0D1B3E),
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 40, height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.white24,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              const Text(
+                                'Módulos Deportivos & IA',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  fontFamily: 'Manrope',
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              ListTile(
+                                leading: const Icon(CupertinoIcons.play_circle_fill, color: Color(0xFF00E5FF), size: 28),
+                                title: const Text(
+                                  'Rutina Generada por IA',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                                ),
+                                subtitle: const Text(
+                                  'Entrenamiento de fuerza y velocidad adaptado por Gemini',
+                                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                                ),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => TrainingScreen(
+                                        athleteId: athleteId,
+                                        athleteName: nombre,
+                                        sport: sport,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const Divider(color: Colors.white12, height: 16),
+                              ListTile(
+                                leading: const Icon(CupertinoIcons.bolt_fill, color: Color(0xFF00E5FF), size: 28),
+                                title: const Text(
+                                  'Kinetic Lab (IA & Biometría)',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                                ),
+                                subtitle: const Text(
+                                  'Gráficos de telemetría, simulación y reporte biomecánico AI',
+                                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                                ),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => KineticLabScreen(
+                                        athleteId: athleteId,
+                                        athleteName: nombre,
+                                        sport: sport,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 24),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   );
                 } else if (index == 2) {
                   Navigator.push(

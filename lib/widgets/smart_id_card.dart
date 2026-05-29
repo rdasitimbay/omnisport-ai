@@ -48,17 +48,17 @@ class SmartIdCard extends StatelessWidget {
               stops: [0.0, 0.35, 0.65, 1.0],
             ),
             border: Border.all(
-              color: const Color(0xFF00E5FF).withOpacity(0.4),
+              color: const Color(0xFF00E5FF).withValues(alpha: 0.4),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF00E5FF).withOpacity(0.25),
+                color: const Color(0xFF00E5FF).withValues(alpha: 0.25),
                 blurRadius: 24,
                 spreadRadius: 2,
               ),
               BoxShadow(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 blurRadius: 16,
                 offset: const Offset(0, 8),
               ),
@@ -82,9 +82,9 @@ class SmartIdCard extends StatelessWidget {
                 end: Alignment.centerRight,
                 colors: [
                   Colors.transparent,
-                  const Color(0xFF00E5FF).withOpacity(0.04),
-                  const Color(0xFF7B2FBE).withOpacity(0.06),
-                  const Color(0xFF00E5FF).withOpacity(0.03),
+                  const Color(0xFF00E5FF).withValues(alpha: 0.04),
+                  const Color(0xFF7B2FBE).withValues(alpha: 0.06),
+                  const Color(0xFF00E5FF).withValues(alpha: 0.03),
                   Colors.transparent,
                 ],
                 stops: const [0.0, 0.3, 0.5, 0.7, 1.0],
@@ -132,7 +132,7 @@ class SmartIdCard extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF00E5FF).withOpacity(0.4),
+            color: const Color(0xFF00E5FF).withValues(alpha: 0.4),
             blurRadius: 10,
             spreadRadius: 1,
           ),
@@ -165,7 +165,7 @@ class SmartIdCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF00E5FF).withOpacity(0.3),
+            color: const Color(0xFF00E5FF).withValues(alpha: 0.3),
             blurRadius: 8,
           ),
         ],
@@ -219,9 +219,9 @@ class SmartIdCard extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
+            color: Colors.white.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: Colors.white.withOpacity(0.15)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
           ),
           child: const Text(
             'SMART ID',
@@ -252,7 +252,7 @@ class SmartIdCard extends StatelessWidget {
         Text(
           credential.category,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.65),
+            color: Colors.white.withValues(alpha: 0.65),
             fontSize: 10,
             letterSpacing: 0.3,
           ),
@@ -283,9 +283,9 @@ class SmartIdCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.5), width: 0.8),
+        border: Border.all(color: color.withValues(alpha: 0.5), width: 0.8),
       ),
       child: Text(
         label,
@@ -316,7 +316,7 @@ class SmartIdCard extends StatelessWidget {
         ),
         Text(
           'Válido hasta $expiry',
-          style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 8),
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 8),
         ),
       ],
     );

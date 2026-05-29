@@ -56,8 +56,8 @@ void main() async {
 
     // Habilitar persistencia offline para Firestore (Modo Torneo sin red/Cache local)
     // Se debe configurar *después* de llamar a useFirestoreEmulator
-    FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: true,
+    FirebaseFirestore.instance.settings = Settings(
+      persistenceEnabled: !kIsWeb,
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
 
@@ -109,6 +109,7 @@ void main() async {
       if (token != null && user != null) {
         await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
           'fcmToken': token,
+          'fcmTokens': FieldValue.arrayUnion([token]),
           'fcmLastUpdated': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       }

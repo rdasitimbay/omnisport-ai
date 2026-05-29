@@ -1,12 +1,14 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'firestore_service.dart';
 import 'secure_hive_service.dart';
 import '../models/athlete.dart';
 import '../models/session_model.dart';
+
 
 class OfflineSyncService {
   static StreamSubscription<List<ConnectivityResult>>?
@@ -69,6 +71,8 @@ class OfflineSyncService {
 
     final firestoreService = FirestoreService();
     final List<dynamic> keysToDelete = [];
+    final List<Map<String, dynamic>> accessLogsToSync = [];
+    final List<dynamic> accessLogsKeys = [];
 
     debugPrint(
       'OfflineSync: Iniciando sincronización de ${box.length} elementos tipados...',
@@ -91,12 +95,9 @@ class OfflineSyncService {
           } else if (model is Map) {
             final mapModel = Map<String, dynamic>.from(model);
             if (mapModel['sync_type'] == 'access_log') {
-              final db = firestore ?? FirebaseFirestore.instance;
               mapModel.remove('sync_type');
-              mapModel['synced_at'] = FieldValue.serverTimestamp();
-              final docRef = db.collection('access_logs').doc();
-              await docRef.set(mapModel);
-              keysToDelete.add(key);
+              accessLogsToSync.add(mapModel);
+              accessLogsKeys.add(key);
             } else {
               keysToDelete.add(key);
             }
@@ -106,9 +107,25 @@ class OfflineSyncService {
           }
         } catch (e) {
           debugPrint(
-            'OfflineSync: Error sincronizando elemento $key de tipo ${model.runtimeType}: $e',
+            'OfflineSync: Error procesando elemento local $key de tipo ${model.runtimeType}: $e',
           );
         }
+      }
+    }
+
+    if (accessLogsToSync.isNotEmpty) {
+      try {
+        final result = await FirebaseFunctions.instance
+            .httpsCallable('syncAccessLog')
+            .call({'logs': accessLogsToSync});
+        
+        if (result.data['syncedCount'] == accessLogsToSync.length) {
+          keysToDelete.addAll(accessLogsKeys);
+          debugPrint('OfflineSync: ${accessLogsToSync.length} access logs sincronizados vía Cloud Function.');
+        }
+      } catch (e) {
+        debugPrint('OfflineSync: Error al llamar a syncAccessLog Cloud Function: $e');
+        // No añadimos las keys a keysToDelete para reintentar en el futuro
       }
     }
 

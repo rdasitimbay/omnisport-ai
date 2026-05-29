@@ -66,6 +66,16 @@ const mockRevokeRefreshTokens = jest.fn().mockResolvedValue(undefined);
 const mockDeleteUser          = jest.fn().mockResolvedValue(undefined);
 const mockRecursiveDelete     = jest.fn().mockResolvedValue(undefined);
 
+const mockFileDelete = jest.fn().mockResolvedValue(undefined);
+const mockDeleteFiles = jest.fn().mockResolvedValue(undefined);
+const mockBucket = {
+  file: jest.fn(() => ({ delete: mockFileDelete })),
+  deleteFiles: mockDeleteFiles,
+};
+const mockStorage = jest.fn(() => ({
+  bucket: jest.fn(() => mockBucket),
+}));
+
 // Mutable so individual tests can swap for 'not-found' scenarios.
 let currentAthleteSnap = {
   exists: true,
@@ -85,12 +95,14 @@ const makeDocRef = () => ({
 
 // Returns a user snap where role:"admin" for the canonical admin uid, "athlete" otherwise.
 // This mirrors what assertAdmin / assertAdminOrSelf read from db.collection("users").
+const mockUserDocDelete = jest.fn().mockResolvedValue(undefined);
 const mockUserDocFactory = (uid: string) => ({
   id: uid,
   get: jest.fn().mockResolvedValue({
     exists: true,
     data: () => (uid === "admin-uid-001" ? { role: "admin" } : { role: "athlete" }),
   }),
+  delete: mockUserDocDelete,
 });
 
 const mockDbInstance = {
@@ -120,6 +132,7 @@ jest.mock("firebase-admin", () => ({
     revokeRefreshTokens: mockRevokeRefreshTokens,
     deleteUser:          mockDeleteUser,
   })),
+  storage: mockStorage,
 }));
 
 // ─── firebase-functions/v2/https mock — captures handlers ────────────────────
@@ -140,6 +153,7 @@ const HANDLER_ORDER = [
   "processBulkIngestion",
   "logSensitiveAccess",
   "requestAthleteErasure",
+  "deleteUserAccount",
   "syncAccessLog",
 ] as const;
 
@@ -408,8 +422,6 @@ describe("requestAthleteErasure", () => {
     mockRecursiveDelete.mockResolvedValue(undefined);
   });
 
-  // ── LOPDP Art. 16 — Admin erasure ────────────────────────────────────────────
-
   it("[Art. 16] admin erasure: deletes data, revokes tokens, deletes auth account", async () => {
     const result = await H(adminReq({ uid: "athlete-abc-123" })) as Record<string, unknown>;
 
@@ -422,6 +434,11 @@ describe("requestAthleteErasure", () => {
     expect(mockRecursiveDelete).toHaveBeenCalledTimes(1);
     expect(mockRevokeRefreshTokens).toHaveBeenCalledWith("athlete-abc-123");
     expect(mockDeleteUser).toHaveBeenCalledWith("athlete-abc-123");
+
+    // Borrado en cascada: Firestore (users) y Storage
+    expect(mockUserDocDelete).toHaveBeenCalledTimes(1);
+    expect(mockFileDelete).toHaveBeenCalledTimes(1);
+    expect(mockDeleteFiles).toHaveBeenCalledWith({ prefix: "tutor_docs/athlete-abc-123/" });
   });
 
   it("[Art. 37] INITIATED audit log is written BEFORE recursiveDelete", async () => {

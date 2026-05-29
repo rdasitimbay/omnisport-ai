@@ -5,7 +5,7 @@ import '../services/secure_hive_service.dart';
 
 /// Overlay de debug — esquina inferior izquierda, colapsable con tap.
 class DebugSyncOverlay extends StatefulWidget {
-  const DebugSyncOverlay({Key? key}) : super(key: key);
+  const DebugSyncOverlay({super.key});
 
   @override
   State<DebugSyncOverlay> createState() => _DebugSyncOverlayState();

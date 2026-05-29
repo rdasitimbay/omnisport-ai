@@ -29,11 +29,13 @@ class _SessionAttendanceScreenState extends State<SessionAttendanceScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab;
   String _selectedCategory = 'Todas';
-  List<String> _categories = ['Todas'];
 
   // Comienzo y fin de hoy en UTC (Firestore almacena UTC)
   late final Timestamp _todayStart;
   late final Timestamp _todayEnd;
+
+  late Stream<QuerySnapshot> _athletesStream;
+  late Stream<QuerySnapshot> _logsStream;
 
   @override
   void initState() {
@@ -44,6 +46,28 @@ class _SessionAttendanceScreenState extends State<SessionAttendanceScreen>
     final endOfDay   = DateTime.utc(now.year, now.month, now.day + 1);
     _todayStart = Timestamp.fromDate(startOfDay);
     _todayEnd   = Timestamp.fromDate(endOfDay);
+    _initStreams();
+  }
+
+  void _initStreams() {
+    _athletesStream = FirebaseFirestore.instance
+        .collection('athletes')
+        .where('ownerInstitutionId', isEqualTo: widget.institutionId)
+        .snapshots();
+
+    _logsStream = FirebaseFirestore.instance
+        .collection('attendance_logs')
+        .where('timestamp', isGreaterThanOrEqualTo: _todayStart)
+        .where('timestamp', isLessThanOrEqualTo: _todayEnd)
+        .snapshots();
+  }
+
+  @override
+  void didUpdateWidget(SessionAttendanceScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.institutionId != widget.institutionId) {
+      _initStreams();
+    }
   }
 
   @override
@@ -129,10 +153,7 @@ class _SessionAttendanceScreenState extends State<SessionAttendanceScreen>
         child: SafeArea(
           child: StreamBuilder<QuerySnapshot>(
             // Stream de atletas de la institución
-            stream: FirebaseFirestore.instance
-                .collection('athletes')
-                .where('ownerInstitutionId', isEqualTo: widget.institutionId)
-                .snapshots(),
+            stream: _athletesStream,
             builder: (context, athleteSnap) {
               if (!athleteSnap.hasData) {
                 return const Center(child: CircularProgressIndicator(color: Color(0xFF00E5FF)));
@@ -146,24 +167,17 @@ class _SessionAttendanceScreenState extends State<SessionAttendanceScreen>
                 if (cat != null && cat.isNotEmpty) cats.add(cat);
               }
               final sortedCats = cats.toList()..sort();
-              if (!listEquals(sortedCats, _categories)) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) setState(() => _categories = sortedCats);
-                });
-              }
+              
+              final effectiveCategory = sortedCats.contains(_selectedCategory) ? _selectedCategory : 'Todas';
 
-              final filtered = _selectedCategory == 'Todas'
+              final filtered = effectiveCategory == 'Todas'
                   ? allAthletes
                   : allAthletes.where((d) =>
-                      (d.data() as Map)['teamOrCategory'] == _selectedCategory).toList();
+                      (d.data() as Map)['teamOrCategory'] == effectiveCategory).toList();
 
               return StreamBuilder<QuerySnapshot>(
                 // Stream de logs de hoy
-                stream: FirebaseFirestore.instance
-                    .collection('attendance_logs')
-                    .where('timestamp', isGreaterThanOrEqualTo: _todayStart)
-                    .where('timestamp', isLessThanOrEqualTo: _todayEnd)
-                    .snapshots(),
+                stream: _logsStream,
                 builder: (context, logSnap) {
                   final todayLogs = logSnap.data?.docs ?? [];
 
@@ -181,7 +195,7 @@ class _SessionAttendanceScreenState extends State<SessionAttendanceScreen>
                   return Column(
                     children: [
                       // ── Filtro de categoría + resumen ──────────────────
-                      _buildHeader(presentes.length, salida.length, ausentes.length),
+                      _buildHeader(presentes.length, salida.length, ausentes.length, sortedCats, effectiveCategory),
 
                       // ── Tabs ──────────────────────────────────────────
                       Expanded(
@@ -205,7 +219,7 @@ class _SessionAttendanceScreenState extends State<SessionAttendanceScreen>
     );
   }
 
-  Widget _buildHeader(int presentes, int salida, int ausentes) {
+  Widget _buildHeader(int presentes, int salida, int ausentes, List<String> categories, String effectiveCategory) {
     final total = presentes + salida + ausentes;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -216,8 +230,8 @@ class _SessionAttendanceScreenState extends State<SessionAttendanceScreen>
             height: 36,
             child: ListView(
               scrollDirection: Axis.horizontal,
-              children: _categories.map((cat) {
-                final selected = cat == _selectedCategory;
+              children: categories.map((cat) {
+                final selected = cat == effectiveCategory;
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: GestureDetector(

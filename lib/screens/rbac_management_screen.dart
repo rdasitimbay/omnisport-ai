@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import '../services/rbac_service.dart';
 
 class RbacManagementScreen extends StatefulWidget {
   const RbacManagementScreen({Key? key}) : super(key: key);
@@ -39,13 +41,174 @@ class _RbacManagementScreenState extends State<RbacManagementScreen> {
                 _buildTab('Monitor FCM', 2),
                 _buildTab('Remote Config', 3),
                 _buildTab('Broadcast', 4),
+                _buildTab('Vinculación Padre', 5),
               ],
             ),
           ),
         ),
       ),
       body: _buildBody(),
+      floatingActionButton: _currentTabIndex == 0
+          ? FloatingActionButton(
+              onPressed: _showCreateUserDialog,
+              backgroundColor: const Color(0xFF00E5FF),
+              child: const Icon(Icons.person_add, color: Colors.black),
+              tooltip: 'Crear Usuario',
+            )
+          : null,
     );
+  }
+
+  Future<void> _showCreateUserDialog() async {
+    final nameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    String selectedRole = 'coach';
+    String selectedDiscipline = 'voleibol';
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateModal) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF003F87),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Crear Nuevo Usuario', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(labelText: 'Nombre Completo', labelStyle: TextStyle(color: Colors.cyanAccent), enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white30)), focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent))),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(labelText: 'Correo Electrónico', labelStyle: TextStyle(color: Colors.cyanAccent), enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white30)), focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent))),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(labelText: 'Contraseña temporal', labelStyle: TextStyle(color: Colors.cyanAccent), enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white30)), focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent))),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: selectedRole,
+                    dropdownColor: const Color(0xFF003F87),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(labelText: 'Rol Inicial', labelStyle: TextStyle(color: Colors.cyanAccent), enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white30)), focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent))),
+                    items: const [
+                      DropdownMenuItem(value: 'coach',   child: Text('COACH')),
+                      DropdownMenuItem(value: 'athlete', child: Text('ATHLETE')),
+                      DropdownMenuItem(value: 'parent',  child: Text('PARENT')),
+                      DropdownMenuItem(value: 'admin',   child: Text('ADMIN')),
+                    ],
+                    onChanged: (v) { 
+                      if (v != null) setStateModal(() => selectedRole = v); 
+                    },
+                  ),
+                  if (selectedRole == 'coach' || selectedRole == 'athlete') ...[
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: selectedDiscipline,
+                      dropdownColor: const Color(0xFF003F87),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(labelText: 'Disciplina Deportiva', labelStyle: TextStyle(color: Colors.cyanAccent), enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white30)), focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent))),
+                      items: const [
+                        DropdownMenuItem(value: 'voleibol', child: Text('Voleibol 🏐')),
+                        DropdownMenuItem(value: 'basquetbol', child: Text('Básquetbol 🏀')),
+                        DropdownMenuItem(value: 'futbol', child: Text('Fútbol ⚽')),
+                      ],
+                      onChanged: (v) { 
+                        if (v != null) setStateModal(() => selectedDiscipline = v); 
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar', style: TextStyle(color: Colors.white54))),
+              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Crear', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold))),
+            ],
+          );
+        }
+      ),
+    );
+
+    if (result == true) {
+      final name = nameCtrl.text.trim();
+      final email = emailCtrl.text.trim();
+      final pass = passCtrl.text.trim();
+      if (name.isEmpty || email.isEmpty || pass.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor completa todos los campos')));
+        return;
+      }
+
+      showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.cyanAccent)));
+
+      try {
+        final appName = 'SecondaryApp_${DateTime.now().millisecondsSinceEpoch}';
+        FirebaseApp secondaryApp = await Firebase.initializeApp(
+          name: appName,
+          options: Firebase.app().options,
+        );
+        UserCredential credential = await FirebaseAuth.instanceFor(app: secondaryApp).createUserWithEmailAndPassword(
+          email: email,
+          password: pass,
+        );
+
+        final uid = credential.user!.uid;
+
+        // Guardar metadata en users
+        await _db.collection('users').doc(uid).set({
+          'email': email,
+          'displayName': name,
+          'role': selectedRole,
+          'disciplina': (selectedRole == 'coach' || selectedRole == 'athlete') ? selectedDiscipline : null,
+          'isActive': true,
+          'createdAt': FieldValue.serverTimestamp(),
+          'institutionId': 'inst_piloto_stresstest', 
+        });
+
+        // Crear registro en athletes si aplica
+        if (selectedRole == 'athlete') {
+          final athleteRef = _db.collection('athletes').doc(uid);
+          await athleteRef.set({
+            'full_name': name,
+            'ownerInstitutionId': 'inst_piloto_stresstest',
+            'teamOrCategory': 'General',
+            'paymentStatus': 'Pago Pendiente',
+            'status': 'Activo',
+            'photoUrl': '',
+            'disciplina': selectedDiscipline,
+            'consent_timestamp': FieldValue.serverTimestamp(),
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          await athleteRef.collection('sport_details').doc(selectedDiscipline).set({
+            'sport_type': selectedDiscipline,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
+
+        await secondaryApp.delete();
+        if (mounted) {
+          Navigator.pop(context); 
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Usuario $name creado exitosamente'), backgroundColor: Colors.green));
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.pop(context); 
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al crear usuario: $e'), backgroundColor: Colors.red));
+        }
+      }
+    }
   }
 
   Widget _buildTab(String title, int index) {
@@ -69,6 +232,7 @@ class _RbacManagementScreenState extends State<RbacManagementScreen> {
       case 2: return _buildFcmMonitor();
       case 3: return _buildRemoteConfigPanel();
       case 4: return _buildBroadcastPanel();
+      case 5: return _buildParentLinkingPanel();
       default: return const SizedBox.shrink();
     }
   }
@@ -85,28 +249,323 @@ class _RbacManagementScreenState extends State<RbacManagementScreen> {
           itemCount: users.length,
           itemBuilder: (context, index) {
             final data = users[index].data() as Map<String, dynamic>;
-            final role = data['role'] ?? 'user';
+            final role = RbacService.normalize(data['role'] as String?);
             final email = data['email'] ?? 'Sin correo';
+            final isActive = data['isActive'] ?? true;
+            final displayName = data['displayName'] ?? data['full_name'] ?? data['name'] ?? 'Sin nombre';
+            
             return Card(
-              color: Colors.white.withOpacity(0.05),
+              color: Colors.white.withValues(alpha: 0.05),
               child: ListTile(
-                title: Text(email, style: const TextStyle(color: Colors.white)),
-                subtitle: Text('Rol: $role', style: const TextStyle(color: Colors.white70)),
-                trailing: DropdownButton<String>(
-                  value: ['admin', 'coach', 'parent', 'user'].contains(role) ? role : 'user',
-                  dropdownColor: const Color(0xFF003F87),
-                  style: const TextStyle(color: Colors.cyanAccent),
-                  items: ['admin', 'coach', 'parent', 'user'].map((String value) {
-                    return DropdownMenuItem<String>(
-                      value: value,
-                      child: Text(value.toUpperCase()),
-                    );
-                  }).toList(),
-                  onChanged: (newRole) {
-                    if (newRole != null) {
-                      _db.collection('users').doc(users[index].id).update({'role': newRole});
-                    }
-                  },
+                leading: CircleAvatar(
+                  backgroundColor: RbacService.getRoleColor(role).withValues(alpha: 0.15),
+                  child: Icon(RbacService.getRoleIcon(role), color: RbacService.getRoleColor(role), size: 20),
+                ),
+                title: Row(
+                  children: [
+                    Expanded(child: Text(displayName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+                    const SizedBox(width: 8),
+                    RbacService.roleBadge(role),
+                  ],
+                ),
+                subtitle: Text('$email | Estado: ${isActive ? "Activo" : "Inactivo"}', style: const TextStyle(color: Colors.white70)),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Switch(
+                      value: isActive,
+                      activeColor: Colors.greenAccent,
+                      inactiveThumbColor: Colors.redAccent,
+                      inactiveTrackColor: Colors.redAccent.withValues(alpha: 0.3),
+                      onChanged: (val) {
+                        _db.collection('users').doc(users[index].id).update({'isActive': val});
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    DropdownButton<String>(
+                      value: [RbacService.roleAdmin, RbacService.roleCoach, RbacService.roleAthlete, RbacService.roleParent].contains(role) ? role : RbacService.roleAthlete,
+                      dropdownColor: const Color(0xFF003F87),
+                      style: const TextStyle(color: Colors.cyanAccent),
+                      items: [RbacService.roleAdmin, RbacService.roleCoach, RbacService.roleAthlete, RbacService.roleParent].map((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(RbacService.getRoleLabel(value).toUpperCase()),
+                        );
+                      }).toList(),
+                      onChanged: (newRole) async {
+                        if (newRole != null) {
+                          final uid = users[index].id;
+                          await _db.collection('users').doc(uid).update({'role': newRole});
+                          
+                          if (newRole == 'athlete') {
+                            final athleteRef = _db.collection('athletes').doc(uid);
+                            final athleteSnap = await athleteRef.get();
+                            if (!athleteSnap.exists) {
+                              await athleteRef.set({
+                                'full_name': displayName == 'Sin nombre' ? 'Nuevo Atleta' : displayName,
+                                'ownerInstitutionId': data['institutionId'] ?? 'inst_piloto_stresstest',
+                                'teamOrCategory': 'General',
+                                'paymentStatus': 'Pago Pendiente',
+                                'status': 'Activo',
+                                'photoUrl': '',
+                                'disciplina': 'voleibol',
+                                'consent_timestamp': FieldValue.serverTimestamp(),
+                                'createdAt': FieldValue.serverTimestamp(),
+                              });
+                              // Also write to sport_details subcollection
+                              final sportRef = athleteRef.collection('sport_details').doc('voleibol');
+                              await sportRef.set({
+                                'sport_type': 'voleibol',
+                                'updatedAt': FieldValue.serverTimestamp(),
+                              }, SetOptions(merge: true));
+                            }
+                          }
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.edit, color: Colors.cyanAccent),
+                      tooltip: 'Editar Datos',
+                      onPressed: () async {
+                        final nameCtrl = TextEditingController(text: displayName == 'Sin nombre' ? '' : displayName);
+                        final emailCtrl = TextEditingController(text: email == 'Sin correo' ? '' : email);
+                        final phoneCtrl = TextEditingController(text: data['phone'] ?? '');
+                        String selectedDiscipline = data['disciplina'] ?? 'voleibol';
+
+                        final updated = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: const Color(0xFF003F87),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            title: const Text('Editar Usuario', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            content: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  TextField(
+                                    controller: nameCtrl,
+                                    style: const TextStyle(color: Colors.white),
+                                    decoration: const InputDecoration(
+                                      labelText: 'Nombre Completo',
+                                      labelStyle: TextStyle(color: Colors.cyanAccent),
+                                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white30)),
+                                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  TextField(
+                                    controller: emailCtrl,
+                                    style: const TextStyle(color: Colors.white),
+                                    decoration: const InputDecoration(
+                                      labelText: 'Correo Electrónico',
+                                      labelStyle: TextStyle(color: Colors.cyanAccent),
+                                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white30)),
+                                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  TextField(
+                                    controller: phoneCtrl,
+                                    style: const TextStyle(color: Colors.white),
+                                    decoration: const InputDecoration(
+                                      labelText: 'Teléfono',
+                                      labelStyle: TextStyle(color: Colors.cyanAccent),
+                                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white30)),
+                                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
+                                    ),
+                                  ),
+                                  if (role == 'athlete') ...[
+                                    const SizedBox(height: 16),
+                                    DropdownButtonFormField<String>(
+                                      value: selectedDiscipline,
+                                      dropdownColor: const Color(0xFF003F87),
+                                      style: const TextStyle(color: Colors.white),
+                                      decoration: const InputDecoration(
+                                        labelText: 'Disciplina Deportiva Primaria',
+                                        labelStyle: TextStyle(color: Colors.cyanAccent),
+                                        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white30)),
+                                        focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(value: 'voleibol', child: Text('Voleibol 🏐')),
+                                        DropdownMenuItem(value: 'basquetbol', child: Text('Básquetbol 🏀')),
+                                        DropdownMenuItem(value: 'futbol', child: Text('Fútbol ⚽')),
+                                      ],
+                                      onChanged: (v) {
+                                        if (v != null) selectedDiscipline = v;
+                                      },
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Guardar', style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        );
+
+                        if (updated == true) {
+                          try {
+                            final uid = users[index].id;
+                            final newName = nameCtrl.text.trim();
+                            final newEmail = emailCtrl.text.trim();
+                            final newPhone = phoneCtrl.text.trim();
+
+                            final Map<String, dynamic> updates = {
+                              'displayName': newName,
+                              'full_name': newName,
+                              'email': newEmail,
+                              'phone': newPhone,
+                            };
+                            if (role == 'athlete') {
+                              updates['disciplina'] = selectedDiscipline;
+                            }
+
+                            await _db.collection('users').doc(uid).update(updates);
+
+                            if (role == 'athlete') {
+                              final athleteRef = _db.collection('athletes').doc(uid);
+                              final athleteSnap = await athleteRef.get();
+                              if (athleteSnap.exists) {
+                                await athleteRef.update({
+                                  'full_name': newName,
+                                  'phone': newPhone,
+                                  'disciplina': selectedDiscipline,
+                                });
+                              } else {
+                                await athleteRef.set({
+                                  'full_name': newName.isEmpty ? 'Nuevo Atleta' : newName,
+                                  'ownerInstitutionId': data['institutionId'] ?? 'inst_piloto_stresstest',
+                                  'teamOrCategory': 'General',
+                                  'paymentStatus': 'Pago Pendiente',
+                                  'status': 'Activo',
+                                  'photoUrl': '',
+                                  'disciplina': selectedDiscipline,
+                                  'consent_timestamp': FieldValue.serverTimestamp(),
+                                  'createdAt': FieldValue.serverTimestamp(),
+                                });
+                              }
+                              // Also write to sport_details subcollection
+                              final sportRef = athleteRef.collection('sport_details').doc(selectedDiscipline);
+                              await sportRef.set({
+                                'sport_type': selectedDiscipline,
+                                'updatedAt': FieldValue.serverTimestamp(),
+                              }, SetOptions(merge: true));
+                            }
+
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Usuario actualizado correctamente'), backgroundColor: Colors.green),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error al actualizar: $e'), backgroundColor: Colors.redAccent),
+                              );
+                            }
+                          }
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.lock_reset, color: Colors.orangeAccent),
+                      tooltip: 'Restablecer Contraseña',
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: const Color(0xFF003F87),
+                            title: const Text('Restablecer Contraseña', style: TextStyle(color: Colors.white)),
+                            content: Text('¿Enviar correo de restablecimiento a $email?', style: const TextStyle(color: Colors.white70)),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Enviar', style: TextStyle(color: Colors.orangeAccent)),
+                              ),
+                            ],
+                          ),
+                        );
+                        
+                        if (confirm == true) {
+                          try {
+                            await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Correo enviado a $email'), backgroundColor: Colors.green),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+                              );
+                            }
+                          }
+                        }
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.redAccent),
+                      tooltip: 'Eliminar Usuario',
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: const Color(0xFF003F87),
+                            title: const Text('Eliminar Usuario', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                            content: Text('¿Estás seguro de que deseas eliminar permanentemente a $email de la base de datos de Auth? Esta acción no se puede deshacer.', style: const TextStyle(color: Colors.white70)),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Eliminar', style: TextStyle(color: Colors.redAccent)),
+                              ),
+                            ],
+                          ),
+                        );
+                        
+                        if (confirm == true) {
+                          try {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Eliminando...'), backgroundColor: Colors.orange),
+                            );
+                            await FirebaseFunctions.instance.httpsCallable('deleteUserAccount').call({
+                              'uid': users[index].id,
+                            });
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Usuario $email eliminado'), backgroundColor: Colors.green),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+                              );
+                            }
+                          }
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
             );
@@ -181,7 +640,7 @@ class _RbacManagementScreenState extends State<RbacManagementScreen> {
             final email = data['email'] ?? 'Usuario Desconocido';
             final token = data['fcmToken'];
             return Card(
-              color: Colors.white.withOpacity(0.05),
+              color: Colors.white.withValues(alpha: 0.05),
               child: ListTile(
                 leading: const Icon(Icons.phone_android, color: Colors.greenAccent),
                 title: Text(email, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -450,5 +909,212 @@ class _RbacManagementScreenState extends State<RbacManagementScreen> {
     _catalogControllers.clear();
     _cooldownTimer?.cancel();
     super.dispose();
+  }
+
+  // =========================================================================
+  // 6. Panel de Vinculación Padre → Atleta (USR-ROL: parent)
+  // Art. 26 LOPDP — Solo admins establecen la relación jurídica de tutela.
+  // =========================================================================
+  final TextEditingController _parentEmailCtrl  = TextEditingController();
+  final TextEditingController _athleteEmailCtrl = TextEditingController();
+  bool _isLinking = false;
+
+  Widget _buildParentLinkingPanel() {
+    return Column(
+      children: [
+        Expanded(
+          child: StreamBuilder<QuerySnapshot>(
+            stream: _db.collection('parent_children').snapshots(),
+            builder: (context, snap) {
+              if (!snap.hasData) return const Center(child: CircularProgressIndicator(color: Colors.cyanAccent));
+              if (snap.data!.docs.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'No hay vinculaciones registradas.\nUsa el formulario de abajo para crear la primera.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                );
+              }
+              return ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  ...snap.data!.docs.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final List<dynamic> children = data['childrenIds'] ?? [];
+                    return Card(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ExpansionTile(
+                        leading: Icon(RbacService.getRoleIcon(RbacService.roleParent),
+                            color: RbacService.getRoleColor(RbacService.roleParent)),
+                        title: Text('Padre: ${doc.id.substring(0, 8)}...',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                        subtitle: Text('${children.length} tutorado(s)',
+                            style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                        iconColor: Colors.white54,
+                        collapsedIconColor: Colors.white38,
+                        children: [
+                          ...children.map((id) => ListTile(
+                            dense: true,
+                            leading: Icon(RbacService.getRoleIcon(RbacService.roleAthlete),
+                                color: RbacService.getRoleColor(RbacService.roleAthlete), size: 18),
+                            title: Text(id.toString(),
+                                style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.link_off, color: Colors.redAccent, size: 18),
+                              tooltip: 'Desvincular',
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    backgroundColor: const Color(0xFF003F87),
+                                    title: const Text('Desvincular', style: TextStyle(color: Colors.redAccent)),
+                                    content: Text('\u00bfDesvincular atleta $id de este padre?',
+                                        style: const TextStyle(color: Colors.white70)),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(ctx, false),
+                                          child: const Text('Cancelar', style: TextStyle(color: Colors.white54))),
+                                      TextButton(onPressed: () => Navigator.pop(ctx, true),
+                                          child: const Text('Desvincular', style: TextStyle(color: Colors.redAccent))),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) {
+                                  await _db.collection('parent_children').doc(doc.id).update({
+                                    'childrenIds': FieldValue.arrayRemove([id]),
+                                  });
+                                  await _db.collection('users').doc(doc.id).update({
+                                    'childrenIds': FieldValue.arrayRemove([id]),
+                                  });
+                                }
+                              },
+                            ),
+                          )),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              );
+            },
+          ),
+        ),
+        // Formulario de vinculación
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('NUEVA VINCULACIÓN',
+                  style: TextStyle(color: Colors.cyanAccent, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2)),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: _parentEmailCtrl,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: const InputDecoration(
+                      labelText: 'Email del Padre',
+                      labelStyle: TextStyle(color: Colors.white54, fontSize: 12),
+                      prefixIcon: Icon(Icons.family_restroom, color: Colors.white38, size: 18),
+                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _athleteEmailCtrl,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    decoration: const InputDecoration(
+                      labelText: 'Email del Atleta',
+                      labelStyle: TextStyle(color: Colors.white54, fontSize: 12),
+                      prefixIcon: Icon(Icons.directions_run, color: Colors.white38, size: 18),
+                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: _isLinking ? null : _linkParentToAthlete,
+                  icon: _isLinking
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                      : const Icon(Icons.link, size: 16),
+                  label: const Text('Vincular'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFCE93D8),
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ]),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _linkParentToAthlete() async {
+    final parentEmail  = _parentEmailCtrl.text.trim();
+    final athleteEmail = _athleteEmailCtrl.text.trim();
+    if (parentEmail.isEmpty || athleteEmail.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Completa ambos campos de email.')),
+      );
+      return;
+    }
+    setState(() => _isLinking = true);
+    try {
+      // Buscar UIDs por email
+      final parentSnap  = await _db.collection('users').where('email', isEqualTo: parentEmail).limit(1).get();
+      final athleteSnap = await _db.collection('users').where('email', isEqualTo: athleteEmail).limit(1).get();
+
+      if (parentSnap.docs.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Padre no encontrado: $parentEmail'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (athleteSnap.docs.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Atleta no encontrado: $athleteEmail'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+
+      final parentUid = parentSnap.docs.first.id;
+      final athleteId = athleteSnap.docs.first.id;
+
+      // Llamar Cloud Function linkParentToAthlete (Admin SDK escribe en parent_children + users)
+      await FirebaseFunctions.instance
+          .httpsCallable('linkParentToAthlete')
+          .call({'parentUid': parentUid, 'athleteId': athleteId});
+
+      if (mounted) {
+        _parentEmailCtrl.clear();
+        _athleteEmailCtrl.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Vinculación registrada exitosamente'), backgroundColor: Colors.green),
+        );
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.message}'), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isLinking = false);
+    }
   }
 }
