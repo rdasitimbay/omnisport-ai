@@ -7,32 +7,74 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user');
+    }
+
     function hasRole(role) {
-      return isAuthenticated() && request.auth.token.role == role;
+      return isAuthenticated() && 
+             (request.auth.token.get('role', '') == role || userRole() == role);
     }
 
     function isAdmin() {
       return hasRole('admin');
     }
 
+    function coachCategory() {
+      return request.auth.token.get('category', 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('category', ''));
+    }
+
+    function isParentOfAthlete(athId) {
+      return hasRole('parent') && 
+             (athId in request.auth.token.get('tutees', []) || 
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('childrenIds', []).hasAll([athId]));
+    }
+
+    function isValidAthleteUpdate() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['rol', 'role', 'institutionId', 'ownerInstitutionId', 'is_compliant_LOPDP', 'createdAt']);
+    }
+
+    // ==========================================
+    // 0. REGLAS PARA USUARIOS (PERFILES DE ACCESO)
+    // ==========================================
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin()) && 
+                    (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
     // ==========================================
     // 1. REGLAS PARA ATLETAS (ANONIMIZACIÓN LOPDP)
     // ==========================================
     match /athletes/{dni_hash} {
-      // El Admin accede a todo. El Coach ve si coincide con su categoría.
-      // El Padre accede SOLO si el hash del menor está vinculado en su token de acceso.
       allow read: if isAdmin() || 
-                  (hasRole('coach') && resource.data.category == request.auth.token.category) ||
-                  (hasRole('parent') && dni_hash in request.auth.token.tutees);
+                  (isAuthenticated() && request.auth.uid == dni_hash) ||
+                  (hasRole('coach') && resource.data.get('category', resource.data.get('teamOrCategory', '')) == coachCategory()) ||
+                  isParentOfAthlete(dni_hash);
       
       allow write: if isAdmin();
+      allow update: if (isAuthenticated() && request.auth.uid == dni_hash && isValidAthleteUpdate()) || isAdmin();
+
+      match /sport_details/{sportId} {
+        allow read: if isAuthenticated() && (request.auth.uid == dni_hash || isAdmin() || hasRole('coach') || isParentOfAthlete(dni_hash));
+        allow write: if isAdmin();
+      }
+
+      match /historial_entrenamientos/{sessionId} {
+        allow read: if isAuthenticated() && (request.auth.uid == dni_hash || isAdmin() || hasRole('coach') || isParentOfAthlete(dni_hash));
+        allow create: if isAdmin() || hasRole('coach');
+        allow update, delete: if isAdmin();
+      }
     }
 
     // ==========================================
     // 2. BÓVEDA FAMILIAR Y CONSENTIMIENTOS (DERECHOS ARCO)
     // ==========================================
     match /consents/{parent_uid} {
-      // Un padre solo gestiona y revoca sus propios consentimientos
       allow read, write: if isAuthenticated() && (request.auth.uid == parent_uid || isAdmin());
     }
 
@@ -46,18 +88,49 @@ service cloud.firestore {
     // 3. ASISTENCIAS (SOPORTE PARA OFFLINE SYNC)
     // ==========================================
     match /attendance_logs/{log_id} {
-      // Permite la carga masiva diferida generada por el OfflineSyncService del Coach
       allow create: if hasRole('coach') || isAdmin();
-      allow read: if isAdmin() || (hasRole('coach') && resource.data.coach_id == request.auth.uid);
+      allow read: if isAdmin() || 
+                  (hasRole('coach') && (resource.data.get('scannedBy', '') == request.auth.uid || resource.data.get('coach_id', '') == request.auth.uid)) ||
+                  (hasRole('parent') && isParentOfAthlete(resource.data.athleteUid));
     }
 
     // ==========================================
     // 4. BLOQUEO GLOBAL (MAINTENANCE MODE)
     // ==========================================
     match /core_config/global {
-      // Lectura pública para que la app móvil verifique el estado antes del login. Escritura solo Admin.
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // ==========================================
+    // 5. TORNEOS Y PARTIDOS
+    // ==========================================
+    match /tournaments/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || hasRole('coach');
+    }
+
+    match /tournament_matches/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || hasRole('coach');
+    }
+
+    // ==========================================
+    // 6. RELACIÓN PADRE-HIJOS Y CONFIGURACIÓN DE INSTITUCIONES
+    // ==========================================
+    match /parent_children/{parentUid} {
+      allow read: if isAuthenticated() && (request.auth.uid == parentUid || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /institutions/{instId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+
+      match /configuration/{configId} {
+        allow read: if isAuthenticated();
+        allow write: if isAdmin();
+      }
     }
   }
 }

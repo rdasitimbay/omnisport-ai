@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 
 class SecureQRView extends StatefulWidget {
   final String athleteUid;
@@ -30,41 +28,27 @@ class _SecureQRViewState extends State<SecureQRView> {
         final user = FirebaseAuth.instance.currentUser;
         if (user == null) {
           yield 'ERROR:unauthenticated';
-          await Future.delayed(const Duration(seconds: 45));
+          await Future.delayed(const Duration(seconds: 15));
           continue;
         }
-        
-        final idToken = await user.getIdToken();
-        final url = Uri.parse('https://us-central1-omnisport-ai.cloudfunctions.net/generateAttendanceToken');
-        
-        final response = await http.post(
-          url,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $idToken',
-          },
-          body: jsonEncode({
-            'data': {'athleteUid': widget.athleteUid}
-          }),
-        );
 
-        if (response.statusCode == 200) {
-          final body = jsonDecode(response.body);
-          final token = body['result']?['token'] as String?;
-          if (token != null && token.isNotEmpty) {
-            yield token;
-          } else {
-            yield 'ERROR:token_empty';
-          }
+        final callable = FirebaseFunctions.instance.httpsCallable('generateAttendanceToken');
+        final response = await callable.call(<String, dynamic>{
+          'athleteUid': widget.athleteUid,
+        });
+
+        final token = response.data['token'] as String?;
+        if (token != null && token.isNotEmpty) {
+          yield token;
         } else {
-          yield 'ERROR:http_${response.statusCode}';
+          yield 'ERROR:token_empty';
         }
       } catch (e) {
         debugPrint('Error generating attendance token: $e');
         final msg = e.toString();
         yield 'ERROR:${msg.length > 40 ? msg.substring(0, 40) : msg}';
       }
-      await Future.delayed(const Duration(seconds: 45));
+      await Future.delayed(const Duration(seconds: 15));
     }
   }
 
@@ -89,7 +73,7 @@ class _SecureQRViewState extends State<SecureQRView> {
                 Icon(Icons.wifi_off, color: Colors.orangeAccent, size: 40),
                 SizedBox(height: 12),
                 Text(
-                  'Sin conexión.\nReintentando en 45s…',
+                  'Sin conexión.\nReintentando en 15s…',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.orangeAccent, fontSize: 13),
                 ),
@@ -108,7 +92,7 @@ class _SecureQRViewState extends State<SecureQRView> {
                 const Icon(Icons.cloud_off, color: Colors.orangeAccent, size: 40),
                 const SizedBox(height: 12),
                 const Text(
-                  'Servicio temporalmente no disponible.\nReintentando en 45s…',
+                  'Servicio temporalmente no disponible.\nReintentando en 15s…',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.orangeAccent, fontSize: 13),
                 ),
@@ -155,7 +139,7 @@ class _SecureQRViewState extends State<SecureQRView> {
                 Icon(Icons.security, color: Color(0xFF00E5FF), size: 16),
                 SizedBox(width: 8),
                 Text(
-                  'Protegido LOPDP - Expira en 45s',
+                  'Protegido LOPDP - Expira en 15s',
                   style: TextStyle(
                     color: Colors.grey,
                     fontSize: 12,
