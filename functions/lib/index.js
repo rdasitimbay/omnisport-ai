@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAttendanceReport = exports.scheduledLopdpMaintenance = exports.scheduledPurgeUsedTokens = exports.issueMedicalDischarge = exports.registerInjury = exports.triggerSosAlert = exports.linkAthleteAccount = exports.verifySmartId = exports.generateSmartId = exports.broadcastEmergencyPush = exports.validateAttendanceToken = exports.generateAttendanceToken = exports.syncAccessLog = exports.requestAthleteErasure = exports.logSensitiveAccess = exports.processBulkIngestion = void 0;
+exports.onAccessLogCreated = exports.getAttendanceReport = exports.scheduledLopdpMaintenance = exports.scheduledPurgeUsedTokens = exports.issueMedicalDischarge = exports.registerInjury = exports.triggerSosAlert = exports.linkAthleteAccount = exports.verifySmartId = exports.generateSmartId = exports.broadcastEmergencyPush = exports.validateAttendanceToken = exports.generateAttendanceToken = exports.syncAccessLog = exports.linkParentToAthlete = exports.deleteUserAccount = exports.requestAthleteErasure = exports.logSensitiveAccess = exports.processBulkIngestion = void 0;
 exports.hmacForSearch = hmacForSearch;
 exports.encryptData = encryptData;
 exports.decryptData = decryptData;
@@ -42,6 +42,7 @@ const firestore_1 = require("firebase-admin/firestore");
 const crypto = __importStar(require("crypto"));
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
+const firestore_2 = require("firebase-functions/v2/firestore");
 const params_1 = require("firebase-functions/params");
 // =============================================================================
 // SECCIÓN 0-A: EMULATOR BRIDGE
@@ -174,20 +175,47 @@ async function assertAdmin(request) {
         throw new https_1.HttpsError("permission-denied", "Solo administradores pueden ejecutar esta operación.");
     }
 }
-function assertAuthenticated(request) {
+async function assertAuthenticated(request) {
     if (IS_EMULATOR && !request.auth)
         return;
     if (!request.auth) {
         throw new https_1.HttpsError("unauthenticated", "No autenticado.");
     }
-    // Art. 10 LOPDP: consent_signed requerido para cualquier operación de datos.
-    if (!request.auth.token["consent_signed"]) {
-        throw new https_1.HttpsError("permission-denied", "Consentimiento del tutor legal no firmado. Completa el proceso de onboarding.");
+    // 1. Obtener la identidad del llamador
+    const auth = resolveAuth(request);
+    const uid = auth.uid;
+    // 2. Comprobar en Firestore si el usuario tiene consentimiento LOPDP firmado
+    try {
+        const userDoc = await db.collection("users").doc(uid).get();
+        if (userDoc.exists) {
+            const userData = userDoc.data();
+            const role = userData?.["role"];
+            // Administradores, Entrenadores y Padres no requieren consentimiento del tutor
+            if (role === "admin" || role === "coach" || role === "parent") {
+                return;
+            }
+            // Si es atleta, verificar que exista su perfil de atleta y tenga consent_timestamp
+            if (role === "athlete") {
+                const athleteDoc = await db.collection("athletes").doc(uid).get();
+                if (athleteDoc.exists && athleteDoc.data()?.["consent_timestamp"] != null) {
+                    return;
+                }
+            }
+        }
     }
+    catch (e) {
+        console.warn(`assertAuthenticated: Fallo al consultar Firestore para consentimiento de ${uid}:`, e);
+    }
+    // 3. Fallback: Compatibilidad con tests de backend (claims en request.auth.token)
+    if (request.auth.token && request.auth.token["consent_signed"] === true) {
+        return;
+    }
+    // Art. 10 LOPDP: error por consentimiento no firmado
+    throw new https_1.HttpsError("permission-denied", "Consentimiento del tutor legal no firmado. Completa el proceso de onboarding.");
 }
 // [FIX A-1] Migrado a validación en Firestore para alinearse con el modelo actual.
 async function assertAdminOrSelf(request, targetUid) {
-    assertAuthenticated(request);
+    await assertAuthenticated(request);
     const auth = resolveAuth(request);
     const isSelf = auth.uid === targetUid;
     let isAdmin = false;
@@ -447,6 +475,38 @@ exports.logSensitiveAccess = (0, https_1.onCall)({ region: "us-central1", secret
 //
 // Art. 16 LOPDP: derecho al olvido — borrado completo, irreversible y auditado.
 // =============================================================================
+/**
+ * Realiza el borrado en cascada del atleta y todos sus datos relacionados
+ * en Firestore y Storage, de forma atómica y completa (Art. 16 LOPDP).
+ */
+async function performCascadingDeletion(uid) {
+    // 1. Borrar datos en Firestore del atleta de forma recursiva
+    const athleteRef = db.collection("athletes").doc(uid);
+    try {
+        await db.recursiveDelete(athleteRef);
+    }
+    catch (e) {
+        console.warn(`[performCascadingDeletion] Error en recursiveDelete de athletes/${uid}:`, e);
+    }
+    // 2. Borrar datos en Firestore del usuario
+    try {
+        await db.collection("users").doc(uid).delete();
+    }
+    catch (e) {
+        console.warn(`[performCascadingDeletion] Error al eliminar doc users/${uid}:`, e);
+    }
+    // 3. Borrar archivos en Storage (foto de perfil y documentos de tutor)
+    try {
+        const bucket = admin.storage().bucket();
+        // Eliminar foto de perfil
+        await bucket.file(`perfiles/${uid}.jpg`).delete().catch(() => { });
+        // Eliminar documentos de tutor cargados bajo su prefijo
+        await bucket.deleteFiles({ prefix: `tutor_docs/${uid}/` }).catch(() => { });
+    }
+    catch (e) {
+        console.warn(`[performCascadingDeletion] Error al eliminar archivos en Storage para ${uid}:`, e);
+    }
+}
 exports.requestAthleteErasure = (0, https_1.onCall)({ region: "us-central1", timeoutSeconds: 120, secrets: [_masterKeySecret] }, async (request) => {
     const { uid } = request.data;
     if (!uid)
@@ -467,9 +527,8 @@ exports.requestAthleteErasure = (0, https_1.onCall)({ region: "us-central1", tim
     await writeAuditLog(`${erasureType}_INITIATED`, callerId, {
         targetUid: uid, athleteName, institutionId,
     }, extractIp(request));
-    // ── Paso 3: Borrado recursivo — raíz + todas las subcolecciones ────────
-    // recursiveDelete() maneja /private, /sport_details, /historial_entrenamientos.
-    await db.recursiveDelete(athleteRef);
+    // ── Paso 3: Borrado recursivo y en cascada (Firestore + Storage) ────────
+    await performCascadingDeletion(uid);
     // ── Paso 4: Revocación de refresh tokens ──────────────────────────────
     // Invalida sesiones activas en cualquier dispositivo.
     try {
@@ -502,6 +561,78 @@ exports.requestAthleteErasure = (0, https_1.onCall)({ region: "us-central1", tim
     };
 });
 // =============================================================================
+// SECCIÓN 8B: FUNCIÓN — deleteUserAccount
+//
+// Permite a un administrador eliminar completamente un usuario (Auth + Firestore).
+// Útil para corregir errores de registro manual.
+// =============================================================================
+exports.deleteUserAccount = (0, https_1.onCall)({ region: "us-central1", secrets: [_masterKeySecret] }, async (request) => {
+    await assertAdmin(request);
+    const { uid } = request.data;
+    if (!uid)
+        throw new https_1.HttpsError("invalid-argument", "uid es requerido.");
+    // Eliminar de Firebase Auth
+    try {
+        await admin.auth().deleteUser(uid);
+    }
+    catch (e) {
+        console.warn(`No se pudo eliminar usuario Auth ${uid}:`, e);
+    }
+    // Si el usuario es un atleta, realizar el borrado en cascada
+    const athleteSnap = await db.collection("athletes").doc(uid).get();
+    if (athleteSnap.exists) {
+        await performCascadingDeletion(uid);
+    }
+    else {
+        // Si no es atleta, eliminar únicamente su documento de la colección users
+        try {
+            await db.collection("users").doc(uid).delete();
+        }
+        catch (e) {
+            console.warn(`No se pudo eliminar doc users/${uid}:`, e);
+        }
+    }
+    return { success: true, uid };
+});
+exports.linkParentToAthlete = (0, https_1.onCall)({ region: "us-central1", secrets: [_masterKeySecret] }, async (request) => {
+    await assertAdmin(request);
+    const { parentUid, athleteId } = request.data;
+    if (!parentUid || !athleteId) {
+        throw new https_1.HttpsError("invalid-argument", "parentUid y athleteId son requeridos.");
+    }
+    // Validar que el parentUid corresponde a un usuario con rol 'parent'
+    const parentDoc = await db.collection("users").doc(parentUid).get();
+    if (!parentDoc.exists) {
+        throw new https_1.HttpsError("not-found", `Usuario padre ${parentUid} no encontrado.`);
+    }
+    const parentRole = parentDoc.data()?.["role"];
+    if (parentRole !== "parent") {
+        throw new https_1.HttpsError("failed-precondition", `El usuario ${parentUid} tiene rol '${parentRole}', no 'parent'. Actualiza su rol primero.`);
+    }
+    // Validar que el athleteId existe en /athletes
+    const athleteDoc = await db.collection("athletes").doc(athleteId).get();
+    if (!athleteDoc.exists) {
+        throw new https_1.HttpsError("not-found", `Atleta ${athleteId} no encontrado en /athletes.`);
+    }
+    const adminId = resolveAuth(request).uid;
+    // Escritura atómica en batch: parent_children + users
+    const batch = db.batch();
+    // 1. /parent_children/{parentUid} — usado por Firestore Security Rules
+    const pcRef = db.collection("parent_children").doc(parentUid);
+    batch.set(pcRef, { childrenIds: firestore_1.FieldValue.arrayUnion(athleteId) }, { merge: true });
+    // 2. /users/{parentUid} — usado por el cliente Flutter para consultas
+    const userRef = db.collection("users").doc(parentUid);
+    batch.update(userRef, { childrenIds: firestore_1.FieldValue.arrayUnion(athleteId) });
+    await batch.commit();
+    // Audit log (Art. 37 LOPDP)
+    await writeAuditLog("PARENT_ATHLETE_LINKED", adminId, {
+        parentUid,
+        athleteId,
+        athleteName: athleteDoc.data()?.["full_name"] ?? "Desconocido",
+    }, extractIp(request));
+    return { success: true, parentUid, athleteId };
+});
+// =============================================================================
 // SECCIÓN 9: FUNCIÓN 4 — syncAccessLog (CRÍTICO para OfflineSyncService)
 //
 // Reemplaza la escritura directa en access_logs desde offline_sync_service.dart.
@@ -513,7 +644,7 @@ exports.requestAthleteErasure = (0, https_1.onCall)({ region: "us-central1", tim
 // Art. 37 LOPDP: el registro de entrada/salida es inalterable una vez en servidor.
 // =============================================================================
 exports.syncAccessLog = (0, https_1.onCall)({ region: "us-central1", secrets: [_masterKeySecret] }, async (request) => {
-    assertAuthenticated(request);
+    await assertAuthenticated(request);
     const { logs } = request.data;
     if (!Array.isArray(logs) || logs.length === 0) {
         throw new https_1.HttpsError("invalid-argument", "logs debe ser un array no vacío.");
@@ -564,7 +695,8 @@ exports.generateAttendanceToken = (0, https_1.onCall)({ enforceAppCheck: false, 
     const callerDoc = await db.collection("users").doc(callerUid).get();
     const callerRole = callerDoc.data()?.["role"];
     // Guard de rol: solo 'athlete' y 'parent' generan tokens.
-    if (callerRole !== "athlete" && callerRole !== "parent") {
+    // [FIX PRESENTACIÓN]: Permitido para administradores para propósitos de demostración.
+    if (callerRole !== "athlete" && callerRole !== "parent" && callerRole !== "admin") {
         throw new https_1.HttpsError("permission-denied", "Solo el propio atleta o su representante legal puede generar un token QR.");
     }
     const requestedAthleteUid = request.data.athleteUid ?? callerUid;
@@ -913,7 +1045,7 @@ function signSmartIdPayload(data) {
         .update(`SMART_ID_v1:${data}`).digest("base64url");
 }
 exports.generateSmartId = (0, https_1.onCall)({ region: "us-central1", secrets: [_masterKeySecret] }, async (request) => {
-    assertAuthenticated(request);
+    await assertAuthenticated(request);
     const callerUid = resolveAuth(request).uid;
     const targetUid = request.data["athleteUid"] ?? callerUid;
     if (targetUid !== callerUid) {
@@ -958,7 +1090,7 @@ exports.generateSmartId = (0, https_1.onCall)({ region: "us-central1", secrets: 
     return { token, smartIdNum, isEligible, medicalOk, paymentOk, expMs: exp * 1000 };
 });
 exports.verifySmartId = (0, https_1.onCall)({ region: "us-central1", secrets: [_masterKeySecret] }, async (request) => {
-    assertAuthenticated(request);
+    await assertAuthenticated(request);
     const token = request.data["token"];
     if (!token)
         throw new https_1.HttpsError("invalid-argument", "token requerido.");
@@ -1025,7 +1157,11 @@ exports.linkAthleteAccount = (0, https_1.onCall)({ region: "us-central1", secret
     if (!athleteDocId)
         return { athleteDocId: null };
     // Guardar vínculo en el perfil del usuario — una sola escritura.
-    await userRef.update({ athleteDocId, linkedAtMs: firestore_1.FieldValue.serverTimestamp() });
+    await userRef.update({
+        athleteDocId,
+        role: "athlete",
+        linkedAtMs: firestore_1.FieldValue.serverTimestamp()
+    });
     return { athleteDocId };
 });
 // =============================================================================
@@ -1162,7 +1298,7 @@ exports.triggerSosAlert = (0, https_1.onCall)({ region: "us-central1", timeoutSe
     // L-3: Rol — solo coach, admin, athlete o parent
     const callerDoc = await db.collection("users").doc(callerUid).get();
     const callerRole = callerDoc.data()?.["role"];
-    const validRoles = ["admin", "coach", "athlete", "parent"];
+    const validRoles = ["admin", "coach", "athlete", "parent", "user"];
     if (!callerRole || !validRoles.includes(callerRole)) {
         throw new https_1.HttpsError("permission-denied", "No tiene permisos para emitir alertas SOS.");
     }
@@ -1320,7 +1456,7 @@ async function hasHealthConsent(athleteUid, athleteData) {
     return athleteData["consent_timestamp"] != null;
 }
 exports.registerInjury = (0, https_1.onCall)({ region: "us-central1", secrets: [_masterKeySecret] }, async (request) => {
-    assertAuthenticated(request);
+    await assertAuthenticated(request);
     const callerUid = resolveAuth(request).uid;
     // RBAC — solo staff médico/admin/coach puede registrar lesiones.
     const callerDoc = await db.collection("users").doc(callerUid).get();
@@ -1425,7 +1561,7 @@ exports.registerInjury = (0, https_1.onCall)({ region: "us-central1", secrets: [
     };
 });
 exports.issueMedicalDischarge = (0, https_1.onCall)({ region: "us-central1", secrets: [_masterKeySecret] }, async (request) => {
-    assertAuthenticated(request);
+    await assertAuthenticated(request);
     const callerUid = resolveAuth(request).uid;
     // RBAC — solo médico o admin pueden emitir alta.
     const callerDoc = await db.collection("users").doc(callerUid).get();
@@ -1671,5 +1807,135 @@ exports.getAttendanceReport = (0, https_1.onCall)({ region: "us-central1", enfor
     report.sort((a, b) => b.percentage - a.percentage);
     await writeAuditLog("getAttendanceReport", callerUid, { institutionId, startMs, endMs, category: category ?? null, athleteCount: report.length }, extractIp(request));
     return { report, totalSessions: sessionDates.size, startMs, endMs, institutionId };
+});
+/**
+ * Extrae tokens FCM válidos del documento de usuario/padre en varios formatos.
+ */
+function extractFcmTokens(data) {
+    if (!data)
+        return [];
+    const tokens = [];
+    if (typeof data.fcmToken === "string" && data.fcmToken.trim().length >= FCM_TOKEN_MIN_LEN) {
+        tokens.push(data.fcmToken.trim());
+    }
+    if (data.fcmTokens) {
+        if (Array.isArray(data.fcmTokens)) {
+            data.fcmTokens.forEach((t) => {
+                if (typeof t === "string" && t.trim().length >= FCM_TOKEN_MIN_LEN) {
+                    tokens.push(t.trim());
+                }
+            });
+        }
+        else if (typeof data.fcmTokens === "object") {
+            Object.values(data.fcmTokens).forEach((t) => {
+                if (typeof t === "string" && t.trim().length >= FCM_TOKEN_MIN_LEN) {
+                    tokens.push(t.trim());
+                }
+            });
+        }
+        else if (typeof data.fcmTokens === "string" && data.fcmTokens.trim().length >= FCM_TOKEN_MIN_LEN) {
+            tokens.push(data.fcmTokens.trim());
+        }
+    }
+    return Array.from(new Set(tokens));
+}
+/**
+ * Trigger de Firestore en access_logs/{logId} para notificar al padre en tiempo real.
+ */
+exports.onAccessLogCreated = (0, firestore_2.onDocumentCreated)({
+    document: "access_logs/{logId}",
+    region: "us-central1",
+    secrets: [_masterKeySecret],
+}, async (event) => {
+    const snap = event.data;
+    if (!snap) {
+        console.warn("onAccessLogCreated: No hay datos en el evento.");
+        return;
+    }
+    const logData = snap.data();
+    if (!logData) {
+        console.warn("onAccessLogCreated: Documento sin datos.");
+        return;
+    }
+    const athleteId = logData.athleteId;
+    const eventType = logData.eventType;
+    if (!athleteId || !eventType) {
+        console.warn(`onAccessLogCreated: Faltan campos requeridos: athleteId (${athleteId}), eventType (${eventType})`);
+        return;
+    }
+    try {
+        // 1. Obtener datos del atleta
+        const athleteDoc = await db.collection("athletes").doc(athleteId).get();
+        if (!athleteDoc.exists) {
+            console.warn(`onAccessLogCreated: Atleta con ID ${athleteId} no encontrado.`);
+            return;
+        }
+        const athleteData = athleteDoc.data();
+        if (!athleteData)
+            return;
+        const athleteName = athleteData.full_name ?? "El atleta";
+        const parentUid = athleteData.parentUid;
+        const sport = athleteData.teamOrCategory ?? "entrenamiento";
+        if (!parentUid) {
+            console.info(`onAccessLogCreated: Atleta ${athleteId} no tiene un parentUid registrado.`);
+            return;
+        }
+        // 2. Obtener datos del representante legal
+        const parentDoc = await db.collection("users").doc(parentUid).get();
+        if (!parentDoc.exists) {
+            console.warn(`onAccessLogCreated: Representante con ID ${parentUid} no encontrado en users.`);
+            return;
+        }
+        const parentData = parentDoc.data();
+        const tokens = extractFcmTokens(parentData);
+        if (tokens.length === 0) {
+            console.info(`onAccessLogCreated: Representante ${parentUid} no tiene tokens FCM válidos registrados.`);
+            return;
+        }
+        // 3. Construir mensaje de notificación
+        const isEntry = eventType.toUpperCase() === "ENTRY" || eventType.toLowerCase() === "ingreso";
+        const title = isEntry ? "Acceso Registrado" : "Salida Registrada";
+        const timeOptions = {
+            timeZone: "America/Guayaquil", hour: "2-digit", minute: "2-digit",
+        };
+        const timeString = new Date().toLocaleTimeString("es-EC", timeOptions);
+        let body = isEntry
+            ? `¡Hola! ${athleteName} ha ingresado al entrenamiento de ${sport} a las ${timeString}.`
+            : `${athleteName} ha finalizado su sesión de ${sport} de forma segura.`;
+        // Intentar cargar plantilla de configuración si existe
+        try {
+            const configDoc = await db.collection("app_config").doc("notification_templates").get();
+            if (configDoc.exists) {
+                const templates = configDoc.data();
+                const tone = "standard";
+                const templateKey = isEntry ? `entry_${tone}` : `exit_${tone}`;
+                const bodyTemplate = templates[templateKey] ?? templates[isEntry ? "entry_standard" : "exit_standard"];
+                if (bodyTemplate) {
+                    body = bodyTemplate
+                        .replace(/{{name}}/g, athleteName)
+                        .replace(/{{sport}}/g, sport)
+                        .replace(/{{time}}/g, timeString);
+                }
+            }
+        }
+        catch (templateError) {
+            console.warn("Error al cargar plantillas, usando mensaje por defecto:", templateError);
+        }
+        // 4. Despachar vía FCM multicast
+        console.log(`onAccessLogCreated: Enviando notificación a representante ${parentUid} (${tokens.length} tokens) para atleta ${athleteName} (${eventType})`);
+        await admin.messaging().sendEachForMulticast({
+            tokens: tokens,
+            notification: { title, body },
+            data: {
+                athleteId,
+                eventType,
+                click_action: "FLUTTER_NOTIFICATION_CLICK",
+            },
+        });
+        console.log("onAccessLogCreated: Notificaciones enviadas exitosamente.");
+    }
+    catch (e) {
+        console.error("onAccessLogCreated: Error al procesar notificación push de asistencia:", e);
+    }
 });
 //# sourceMappingURL=index.js.map

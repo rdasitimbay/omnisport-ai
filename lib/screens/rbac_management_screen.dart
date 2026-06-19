@@ -926,6 +926,18 @@ class _RbacManagementScreenState extends State<RbacManagementScreen> {
           child: StreamBuilder<QuerySnapshot>(
             stream: _db.collection('parent_children').snapshots(),
             builder: (context, snap) {
+              if (snap.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      'Error al cargar vinculaciones:\n${snap.error}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.redAccent),
+                    ),
+                  ),
+                );
+              }
               if (!snap.hasData) return const Center(child: CircularProgressIndicator(color: Colors.cyanAccent));
               if (snap.data!.docs.isEmpty) {
                 return const Center(

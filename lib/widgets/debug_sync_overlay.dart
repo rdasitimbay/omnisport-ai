@@ -17,7 +17,7 @@ class _DebugSyncOverlayState extends State<DebugSyncOverlay> {
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      bottom: 16,
+      bottom: 130,
       left: 12,
       child: Material(
         color: Colors.transparent,

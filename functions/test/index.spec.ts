@@ -154,7 +154,18 @@ const HANDLER_ORDER = [
   "logSensitiveAccess",
   "requestAthleteErasure",
   "deleteUserAccount",
+  "linkParentToAthlete",
   "syncAccessLog",
+  "generateAttendanceToken",
+  "validateAttendanceToken",
+  "broadcastEmergencyPush",
+  "generateSmartId",
+  "verifySmartId",
+  "linkAthleteAccount",
+  "triggerSosAlert",
+  "registerInjury",
+  "issueMedicalDischarge",
+  "getAttendanceReport",
 ] as const;
 
 jest.mock("firebase-functions/v2/https", () => ({
