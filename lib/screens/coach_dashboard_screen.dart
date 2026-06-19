@@ -7,8 +7,11 @@ import 'package:intl/intl.dart';
 import '../services/firestore_service.dart';
 import 'qr_scanner_screen.dart';
 import 'sos_alert_screen.dart';
-import 'attendance_history_screen.dart';
 import 'tablas_screen.dart';
+import 'pizarra_tactica_screen.dart';
+
+
+
 
 class CoachDashboardScreen extends StatefulWidget {
   final String coachUid;
@@ -216,7 +219,7 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> with Single
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14,
                       letterSpacing: 0.5)),
               const SizedBox(height: 16),
-              // Fila 1: Torneos | Zero Trust
+              // Fila 1: Torneos | Zero Trust | Pizarra Táctica
               Row(
                 children: [
                   Expanded(
@@ -240,8 +243,20 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> with Single
                           MaterialPageRoute(builder: (_) => const QrScannerScreen())),
                     ),
                   ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _coachActionButton(
+                      icon: Icons.draw_outlined,
+                      label: 'Pizarra',
+                      subtitle: 'Táctica',
+                      color: Colors.tealAccent,
+                      onTap: () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => const PizarraTacticaScreen())),
+                    ),
+                  ),
                 ],
               ),
+
               const SizedBox(height: 10),
               // Fila 2: Historial | S.O.S | Rendimiento
               Row(
