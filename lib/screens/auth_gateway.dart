@@ -106,6 +106,33 @@ class AuthGateway extends StatelessWidget {
                           ? const AdminDashboardScreen(institutionId: 'inst_piloto_stresstest')
                           : const AdminMobileDashboardScreen();
                     }
+
+                    // Check maintenance mode for all non-admin roles
+                    if (isMaintenance) {
+                      return Scaffold(
+                        backgroundColor: const Color(0xFF001F3F),
+                        body: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.build, size: 80, color: Colors.amberAccent),
+                              const SizedBox(height: 20),
+                              const Text('Servicio Temporalmente No Disponible',
+                                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 10),
+                              const Text('Estamos realizando mejoras. Vuelve pronto.',
+                                  style: TextStyle(color: Colors.white70)),
+                              const SizedBox(height: 30),
+                              ElevatedButton(
+                                onPressed: () => FirebaseAuth.instance.signOut(),
+                                child: const Text('Cerrar Sesión'),
+                              )
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
                     // RBAC USR-ROL: Padre de familia
                     // Acceso restringido a datos de sus tutorados (childrenIds en Firestore)
                     if (role == RbacService.roleParent) {
@@ -121,31 +148,6 @@ class AuthGateway extends StatelessWidget {
                     }
                   }
 
-                  if (isMaintenance && role != 'admin') {
-                    return Scaffold(
-                      backgroundColor: const Color(0xFF001F3F),
-                      body: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.build, size: 80, color: Colors.amberAccent),
-                            const SizedBox(height: 20),
-                            const Text('Servicio Temporalmente No Disponible',
-                                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 10),
-                            const Text('Estamos realizando mejoras. Vuelve pronto.',
-                                style: TextStyle(color: Colors.white70)),
-                            const SizedBox(height: 30),
-                            ElevatedButton(
-                              onPressed: () => FirebaseAuth.instance.signOut(),
-                              child: const Text('Cerrar Sesión'),
-                            )
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-
                   // athleteDocId: ID del documento /athletes/{id} vinculado a este usuario.
                   // Si está disponible, el DashboardScreen carga el perfil correcto.
                   // Si no, el Dashboard muestra "Perfil no configurado" (cuenta pendiente de ingesta).
@@ -157,6 +159,7 @@ class AuthGateway extends StatelessWidget {
             }
           );
         }
+
 
         // Si está deslogueado, construye la matriz de Login
         return const LoginScreen();
