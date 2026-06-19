@@ -881,8 +881,9 @@ export const syncAccessLog = onCall<SyncAccessLogRequest>(
 // ============================================================================
 
 // TTL oficial del token QR y tolerancia de reloj (red lenta, relojes desincronizados)
-const TOKEN_TTL_MS       = 45_000;
-const TOKEN_CLOCK_SKEW_MS =  5_000;
+const TOKEN_TTL_MS       = 15_000;
+const TOKEN_CLOCK_SKEW_MS = 15_000;
+
 
 /**
  * generateAttendanceToken
@@ -2081,7 +2082,8 @@ export const issueMedicalDischarge = onCall(
 // Art. 37 LOPDP: audit_logs conservados 24 meses; luego eliminados automáticamente.
 //
 // scheduledPurgeUsedTokens : diario — elimina used_tokens con más de 2 horas.
-//   Los tokens solo necesitan durar TOKEN_TTL_MS (45s) + margen; retener más
+//   Los tokens solo necesitan durar TOKEN_TTL_MS (15s) + margen; retener más
+
 //   es innecesario y ocupa Firestore sin valor.
 //
 // scheduledLopdpMaintenance : mensual (día 1, 03:00 America/Guayaquil) —

@@ -677,8 +677,8 @@ exports.syncAccessLog = (0, https_1.onCall)({ region: "us-central1", secrets: [_
 // MOTOR DE TOKENS DINÁMICOS (SPRINT 4)
 // ============================================================================
 // TTL oficial del token QR y tolerancia de reloj (red lenta, relojes desincronizados)
-const TOKEN_TTL_MS = 45000;
-const TOKEN_CLOCK_SKEW_MS = 5000;
+const TOKEN_TTL_MS = 15000;
+const TOKEN_CLOCK_SKEW_MS = 15000;
 /**
  * generateAttendanceToken
  * [FIX C-3] Solo atletas y representantes legales pueden generar tokens QR.
@@ -1656,7 +1656,7 @@ exports.issueMedicalDischarge = (0, https_1.onCall)({ region: "us-central1", sec
 // Art. 37 LOPDP: audit_logs conservados 24 meses; luego eliminados automáticamente.
 //
 // scheduledPurgeUsedTokens : diario — elimina used_tokens con más de 2 horas.
-//   Los tokens solo necesitan durar TOKEN_TTL_MS (45s) + margen; retener más
+//   Los tokens solo necesitan durar TOKEN_TTL_MS (15s) + margen; retener más
 //   es innecesario y ocupa Firestore sin valor.
 //
 // scheduledLopdpMaintenance : mensual (día 1, 03:00 America/Guayaquil) —
