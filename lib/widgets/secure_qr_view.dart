@@ -13,13 +13,58 @@ class SecureQRView extends StatefulWidget {
   State<SecureQRView> createState() => _SecureQRViewState();
 }
 
-class _SecureQRViewState extends State<SecureQRView> {
+class _SecureQRViewState extends State<SecureQRView> with SingleTickerProviderStateMixin {
   late Stream<String> _tokenStream;
+  StreamSubscription<String>? _subscription;
+  late AnimationController _controller;
+  String? _currentToken;
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 15),
+    );
+
     _tokenStream = _generateTokenStream();
+    _subscription = _tokenStream.listen(
+      (token) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            if (token.startsWith('ERROR:')) {
+              _errorMessage = token;
+              _currentToken = null;
+              _controller.stop();
+            } else {
+              _errorMessage = null;
+              _currentToken = token;
+              _controller.reverse(from: 1.0); // Reset animation to 15s
+            }
+          });
+        }
+      },
+      onError: (err) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = 'ERROR:${err.toString()}';
+            _currentToken = null;
+            _controller.stop();
+          });
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    _controller.dispose();
+    super.dispose();
   }
 
   Stream<String> _generateTokenStream() async* {
@@ -54,96 +99,109 @@ class _SecureQRViewState extends State<SecureQRView> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<String>(
-      stream: _tokenStream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00E5FF)),
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00E5FF)),
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      final isWifiOff = _errorMessage!.contains('wifi') || _errorMessage!.contains('conn');
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isWifiOff ? Icons.wifi_off : Icons.cloud_off, 
+              color: Colors.orangeAccent, 
+              size: 40
             ),
-          );
-        }
-
-        if (snapshot.hasError || !snapshot.hasData) {
-          return const Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.wifi_off, color: Colors.orangeAccent, size: 40),
-                SizedBox(height: 12),
-                Text(
-                  'Sin conexión.\nReintentando en 15s…',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.orangeAccent, fontSize: 13),
-                ),
-              ],
+            const SizedBox(height: 12),
+            Text(
+              isWifiOff 
+                  ? 'Sin conexión.\nReintentando en 15s…' 
+                  : 'Servicio temporalmente no disponible.\nReintentando en 15s…',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.orangeAccent, fontSize: 13),
             ),
-          );
-        }
+          ],
+        ),
+      );
+    }
 
-        final token = snapshot.data!;
+    if (_currentToken == null) {
+      return const SizedBox.shrink();
+    }
 
-        if (token.startsWith('ERROR:')) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.cloud_off, color: Colors.orangeAccent, size: 40),
-                const SizedBox(height: 12),
-                const Text(
-                  'Servicio temporalmente no disponible.\nReintentando en 15s…',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.orangeAccent, fontSize: 13),
-                ),
-              ],
-            ),
-          );
-        }
-
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final seconds = (_controller.value * 15).ceil();
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF00E5FF).withValues(alpha: 0.2),
-                    blurRadius: 20,
-                    spreadRadius: 2,
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                // Círculo de progreso animado (detrás del contenedor blanco del QR)
+                SizedBox(
+                  width: 290,
+                  height: 290,
+                  child: CircularProgressIndicator(
+                    value: _controller.value,
+                    strokeWidth: 6,
+                    color: const Color(0xFF00E5FF),
+                    backgroundColor: const Color(0xFF00E5FF).withOpacity(0.1),
                   ),
-                ],
-              ),
-              child: QrImageView(
-                data: token,
-                version: QrVersions.auto,
-                size: 250.0,
-                backgroundColor: Colors.white,
-                eyeStyle: const QrEyeStyle(
-                  eyeShape: QrEyeShape.square,
-                  color: Color(0xFF0A192F),
                 ),
-                dataModuleStyle: const QrDataModuleStyle(
-                  dataModuleShape: QrDataModuleShape.square,
-                  color: Color(0xFF0A192F),
+                // Contenedor blanco con el código QR
+                Container(
+                  width: 210,
+                  height: 210,
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(32),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF00E5FF).withOpacity(0.15),
+                        blurRadius: 15,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: QrImageView(
+                    data: _currentToken!,
+                    version: QrVersions.auto,
+                    size: 180.0,
+                    backgroundColor: Colors.white,
+                    eyeStyle: const QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: Color(0xFF0A192F),
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: Color(0xFF0A192F),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-            const SizedBox(height: 16),
-            const Row(
+            const SizedBox(height: 28),
+            Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.security, color: Color(0xFF00E5FF), size: 16),
-                SizedBox(width: 8),
+                const Icon(Icons.access_time_outlined, color: Color(0xFF00E5FF), size: 18),
+                const SizedBox(width: 8),
                 Text(
-                  'Protegido LOPDP - Expira en 15s',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
+                  'Expira en $seconds s',
+                  style: const TextStyle(
+                    color: Color(0xFF00E5FF),
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ],
