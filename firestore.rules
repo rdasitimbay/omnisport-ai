@@ -95,10 +95,10 @@ service cloud.firestore {
     }
 
     // ==========================================
-    // 4. BLOQUEO GLOBAL (MAINTENANCE MODE)
+    // 4. CONFIGURACIÓN GLOBAL (MAINTENANCE MODE & NOTIFICATION TEMPLATES)
     // ==========================================
-    match /core_config/global {
-      allow read: if true;
+    match /app_config/{configId} {
+      allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 

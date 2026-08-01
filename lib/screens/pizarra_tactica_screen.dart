@@ -38,6 +38,9 @@ class PizarraTacticaScreen extends StatefulWidget {
 }
 
 class _PizarraTacticaScreenState extends State<PizarraTacticaScreen> {
+  // Key for the interactive canvas/court area to get localized coordinates
+  final GlobalKey _canvasKey = GlobalKey();
+
   // Tools
   // 'move' - drag players/ball
   // 'draw' - freehand draw lines
@@ -205,43 +208,6 @@ class _PizarraTacticaScreenState extends State<PizarraTacticaScreen> {
             // Calculate sizes and layout responsive orientation
             final bool isLandscape = constraints.maxWidth > constraints.maxHeight;
 
-            // Define sizes for Court
-            final double padX = isLandscape ? 32 : 16;
-            final double padY = isLandscape ? 16 : 32;
-
-            // A volleyball court is exactly 9x18 meters (aspect ratio 1:2)
-            // Let's calculate the largest court rectangle that can fit the available area
-            double courtHeight, courtWidth;
-            if (isLandscape) {
-              // In landscape, we lay out the court vertically in the center, or horizontally?
-              // Vertical court layout works best for volley zones 1-6.
-              // Let's constrain height to constraints.maxHeight - padY * 2
-              courtHeight = constraints.maxHeight - (padY * 2);
-              courtWidth = courtHeight / 2.0;
-              // If it overflows width, constrain by width
-              if (courtWidth > constraints.maxWidth * 0.5) {
-                courtWidth = constraints.maxWidth * 0.45;
-                courtHeight = courtWidth * 2.0;
-              }
-            } else {
-              // Portrait layout: standard vertical court filling center
-              courtWidth = constraints.maxWidth - (padX * 2);
-              courtHeight = courtWidth * 2.0;
-              // If height overflows, constrain by height
-              if (courtHeight > constraints.maxHeight - (padY * 2) - 80) { // leave space for controls
-                courtHeight = constraints.maxHeight - (padY * 2) - 100;
-                courtWidth = courtHeight / 2.0;
-              }
-            }
-
-            // Centralized origin points of the court on screen
-            final double courtLeft = (constraints.maxWidth - courtWidth) / 2.0;
-            final double courtTop = isLandscape 
-                ? (constraints.maxHeight - courtHeight) / 2.0 
-                : (constraints.maxHeight - courtHeight - 60) / 2.0; // slightly shifted up in portrait to fit toolbars
-
-            final Rect courtRect = Rect.fromLTWH(courtLeft, courtTop, courtWidth, courtHeight);
-
             return isLandscape 
                 ? Row(
                     children: [
@@ -249,7 +215,7 @@ class _PizarraTacticaScreenState extends State<PizarraTacticaScreen> {
                       _buildSidebarControls(constraints.maxHeight),
                       // Court + Canvas Area
                       Expanded(
-                        child: _buildCourtInteractiveArea(courtRect, courtWidth, courtHeight),
+                        child: _buildCourtInteractiveArea(isLandscape),
                       ),
                     ],
                   )
@@ -257,7 +223,7 @@ class _PizarraTacticaScreenState extends State<PizarraTacticaScreen> {
                     children: [
                       // Court + Canvas Area
                       Expanded(
-                        child: _buildCourtInteractiveArea(courtRect, courtWidth, courtHeight),
+                        child: _buildCourtInteractiveArea(isLandscape),
                       ),
                       // Bottom Toolbar for Portrait mobile/iPad
                       _buildBottomToolbar(),
@@ -270,164 +236,205 @@ class _PizarraTacticaScreenState extends State<PizarraTacticaScreen> {
   }
 
   // INTERACTIVE CANVAS & COURT STACK
-  Widget _buildCourtInteractiveArea(Rect courtRect, double courtWidth, double courtHeight) {
-    return GestureDetector(
-      // Canvas drawing logic via touch coordinates
-      onPanStart: (details) {
-        if (_activeTool == 'draw') {
-          final RenderBox renderBox = context.findRenderObject() as RenderBox;
-          final localPos = renderBox.globalToLocal(details.globalPosition);
-          // Convert to normalized coordinates relative to court rect
-          final nx = (localPos.dx - courtRect.left) / courtRect.width;
-          final ny = (localPos.dy - courtRect.top) / courtRect.height;
-          setState(() {
-            _currentPathPoints = [Offset(nx, ny)];
-          });
-        }
-      },
-      onPanUpdate: (details) {
-        if (_activeTool == 'draw') {
-          final RenderBox renderBox = context.findRenderObject() as RenderBox;
-          final localPos = renderBox.globalToLocal(details.globalPosition);
-          final nx = (localPos.dx - courtRect.left) / courtRect.width;
-          final ny = (localPos.dy - courtRect.top) / courtRect.height;
-          // Keep points inside slightly padded boundaries to draw correctly
-          setState(() {
-            _currentPathPoints.add(Offset(nx, ny));
-          });
-        }
-      },
-      onPanEnd: (details) {
-        if (_activeTool == 'draw' && _currentPathPoints.isNotEmpty) {
-          setState(() {
-            _paths.add(DrawingPath(
-              normalizedPoints: List.from(_currentPathPoints),
-              color: _selectedColor,
-              strokeWidth: _strokeWidth,
-            ));
-            _currentPathPoints.clear();
-          });
-        }
-      },
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // 1. Basketball/Volleyball Court Render Background
-          Positioned.fromRect(
-            rect: courtRect,
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF0A2B4E), // Deep Blue Court color
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF00E5FF).withValues(alpha: 0.08),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                  ),
+  Widget _buildCourtInteractiveArea(bool isLandscape) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Define sizes for Court
+        final double padX = isLandscape ? 32 : 16;
+        final double padY = isLandscape ? 16 : 32;
 
-                ],
-              ),
-              child: CustomPaint(
-                painter: VolleyballCourtPainter(),
-              ),
-            ),
-          ),
+        // A volleyball court is exactly 9x18 meters (aspect ratio 1:2)
+        // Let's calculate the largest court rectangle that can fit the available area
+        double courtHeight, courtWidth;
+        if (isLandscape) {
+          // In landscape, we lay out the court vertically in the center
+          courtHeight = constraints.maxHeight - (padY * 2);
+          courtWidth = courtHeight / 2.0;
+          // If it overflows width, constrain by width
+          if (courtWidth > constraints.maxWidth) {
+            courtWidth = constraints.maxWidth - (padX * 2);
+            courtHeight = courtWidth * 2.0;
+          }
+        } else {
+          // Portrait layout: standard vertical court filling center
+          courtWidth = constraints.maxWidth - (padX * 2);
+          courtHeight = courtWidth * 2.0;
+          // If height overflows, constrain by height
+          if (courtHeight > constraints.maxHeight - (padY * 2)) {
+            courtHeight = constraints.maxHeight - (padY * 2);
+            courtWidth = courtHeight / 2.0;
+          }
+        }
 
-          // 2. Drawings Canvas Layer (Rendered Lines)
-          Positioned.fromRect(
-            rect: courtRect,
-            child: IgnorePointer(
-              child: CustomPaint(
-                painter: TacticalDrawingPainter(
-                  paths: _paths,
-                  activePath: _currentPathPoints,
-                  activeColor: _selectedColor,
+        // Centralized origin points of the court within the available interactive area
+        final double courtLeft = (constraints.maxWidth - courtWidth) / 2.0;
+        final double courtTop = (constraints.maxHeight - courtHeight) / 2.0;
+
+        final Rect courtRect = Rect.fromLTWH(courtLeft, courtTop, courtWidth, courtHeight);
+
+        return GestureDetector(
+          key: _canvasKey,
+          // Canvas drawing logic via touch coordinates
+          onPanStart: (details) {
+            if (_activeTool == 'draw') {
+              final RenderBox? renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+              if (renderBox != null) {
+                final localPos = renderBox.globalToLocal(details.globalPosition);
+                // Convert to normalized coordinates relative to court rect
+                final nx = (localPos.dx - courtRect.left) / courtRect.width;
+                final ny = (localPos.dy - courtRect.top) / courtRect.height;
+                setState(() {
+                  _currentPathPoints = [Offset(nx, ny)];
+                });
+              }
+            }
+          },
+          onPanUpdate: (details) {
+            if (_activeTool == 'draw') {
+              final RenderBox? renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+              if (renderBox != null) {
+                final localPos = renderBox.globalToLocal(details.globalPosition);
+                final nx = (localPos.dx - courtRect.left) / courtRect.width;
+                final ny = (localPos.dy - courtRect.top) / courtRect.height;
+                setState(() {
+                  _currentPathPoints.add(Offset(nx, ny));
+                });
+              }
+            }
+          },
+          onPanEnd: (details) {
+            if (_activeTool == 'draw' && _currentPathPoints.isNotEmpty) {
+              setState(() {
+                _paths.add(DrawingPath(
+                  normalizedPoints: List.from(_currentPathPoints),
+                  color: _selectedColor,
                   strokeWidth: _strokeWidth,
+                ));
+                _currentPathPoints.clear();
+              });
+            }
+          },
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // 1. Basketball/Volleyball Court Render Background
+              Positioned.fromRect(
+                rect: courtRect,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A2B4E), // Deep Blue Court color
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF00E5FF).withValues(alpha: 0.08),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: CustomPaint(
+                    painter: VolleyballCourtPainter(),
+                  ),
                 ),
               ),
-            ),
-          ),
 
-          // 3. Draggable Player widgets
-          ..._items.map((item) {
-            // Absolute coordinates based on responsive court size
-            final double itemX = courtRect.left + (item.normalizedPos.dx * courtRect.width);
-            final double itemY = courtRect.top + (item.normalizedPos.dy * courtRect.height);
-            final double radius = item.isBall ? 16 : 22;
+              // 2. Drawings Canvas Layer (Rendered Lines)
+              Positioned.fromRect(
+                rect: courtRect,
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: TacticalDrawingPainter(
+                      paths: _paths,
+                      activePath: _currentPathPoints,
+                      activeColor: _selectedColor,
+                      strokeWidth: _strokeWidth,
+                    ),
+                  ),
+                ),
+              ),
 
-            return Positioned(
-              left: itemX - radius,
-              top: itemY - radius,
-              child: GestureDetector(
-                onPanStart: (_) {
-                  if (_activeTool == 'move') {
-                    _draggingItem = item;
-                  }
-                },
-                onPanUpdate: (details) {
-                  if (_activeTool == 'move' && _draggingItem == item) {
-                    final RenderBox renderBox = context.findRenderObject() as RenderBox;
-                    final localPos = renderBox.globalToLocal(details.globalPosition);
+              // 3. Draggable Player widgets
+              ..._items.map((item) {
+                // Absolute coordinates based on responsive court size
+                final double itemX = courtRect.left + (item.normalizedPos.dx * courtRect.width);
+                final double itemY = courtRect.top + (item.normalizedPos.dy * courtRect.height);
+                final double radius = item.isBall ? 16 : 22;
 
-                    // Normalize the new position
-                    double nx = (localPos.dx - courtRect.left) / courtRect.width;
-                    double ny = (localPos.dy - courtRect.top) / courtRect.height;
+                return Positioned(
+                  left: itemX - radius,
+                  top: itemY - radius,
+                  child: GestureDetector(
+                    onPanStart: (_) {
+                      if (_activeTool == 'move') {
+                        _draggingItem = item;
+                      }
+                    },
+                    onPanUpdate: (details) {
+                      if (_activeTool == 'move' && _draggingItem == item) {
+                        final RenderBox? renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+                        if (renderBox != null) {
+                          final localPos = renderBox.globalToLocal(details.globalPosition);
 
-                    // Clamping within bounds of the court + buffer
-                    nx = nx.clamp(-0.05, 1.05);
-                    ny = ny.clamp(-0.05, 1.05);
+                          // Normalize the new position
+                          double nx = (localPos.dx - courtRect.left) / courtRect.width;
+                          double ny = (localPos.dy - courtRect.top) / courtRect.height;
 
-                    setState(() {
-                      item.normalizedPos = Offset(nx, ny);
-                    });
-                  }
-                },
-                onPanEnd: (_) {
-                  _draggingItem = null;
-                },
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.grab,
-                  child: AnimatedScale(
-                    duration: const Duration(milliseconds: 150),
-                    scale: _draggingItem == item ? 1.2 : 1.0,
-                    child: Container(
-                      width: radius * 2,
-                      height: radius * 2,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: item.isBall ? Colors.yellow.shade700 : item.color,
-                        boxShadow: [
-                          BoxShadow(
-                            color: (item.isBall ? Colors.yellow : item.color).withValues(alpha: 0.5),
-                            blurRadius: 8,
-                            spreadRadius: 1,
+                          // Clamping within bounds of the court + buffer
+                          nx = nx.clamp(-0.05, 1.05);
+                          ny = ny.clamp(-0.05, 1.05);
+
+                          setState(() {
+                            item.normalizedPos = Offset(nx, ny);
+                          });
+                        }
+                      }
+                    },
+                    onPanEnd: (_) {
+                      _draggingItem = null;
+                    },
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.grab,
+                      child: AnimatedScale(
+                        duration: const Duration(milliseconds: 150),
+                        scale: _draggingItem == item ? 1.2 : 1.0,
+                        child: Container(
+                          width: radius * 2,
+                          height: radius * 2,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: item.isBall ? Colors.yellow.shade700 : item.color,
+                            boxShadow: [
+                              BoxShadow(
+                                color: (item.isBall ? Colors.yellow : item.color).withValues(alpha: 0.5),
+                                blurRadius: 8,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                            border: Border.all(
+                              color: Colors.white,
+                              width: item.isBall ? 1.5 : 2.5,
+                            ),
                           ),
-
-                        ],
-                        border: Border.all(
-                          color: Colors.white,
-                          width: item.isBall ? 1.5 : 2.5,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          item.label,
-                          style: TextStyle(
-                            color: item.isBall ? Colors.black : Colors.white,
-                            fontSize: item.isBall ? 11 : 12,
-                            fontWeight: FontWeight.bold,
+                          child: Center(
+                            child: Text(
+                              item.label,
+                              style: TextStyle(
+                                color: item.isBall ? Colors.black : Colors.white,
+                                fontSize: item.isBall ? 11 : 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
     );
   }
 
