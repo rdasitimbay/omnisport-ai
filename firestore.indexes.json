@@ -1,0 +1,70 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "attendance_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "athleteUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sos_alerts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "athleteUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "sensitive_data",
+      "fieldPath": "dni_hash",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sensitive_data",
+      "fieldPath": "email_hash",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    }
+  ]
+}

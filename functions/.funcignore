@@ -1,0 +1,8 @@
+node_modules
+.git
+src
+test
+tsconfig*.json
+jest.config.js
+seed_templates.js
+*.md

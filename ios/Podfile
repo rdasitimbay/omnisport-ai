@@ -53,6 +53,26 @@ post_install do |installer|
       
       # 3. Corrige el Deployment Target para evitar advertencias de versiones viejas
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+
+      # 3b. FIX CRÍTICO XCODE 16: Desactivar el verificador de módulos de Clang
+      # Evita que el compilador aísle los encabezados de los Pods y falle al no heredar los paths de Flutter.
+      config.build_settings['CLANG_ENABLE_MODULE_VERIFIER'] = 'NO'
+
+      # 4. Genera dSYM para todos los pods (evita warning "Upload Symbols Failed" de gRPC/Firestore)
+      config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
+
+      # 5. Deshabilita firma de código SOLO para el SDK del simulador
+      #    (en dispositivo físico la firma la hereda del app principal)
+      config.build_settings['CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]'] = 'NO'
+      config.build_settings['CODE_SIGNING_REQUIRED[sdk=iphonesimulator*]'] = 'NO'
+      config.build_settings['CODE_SIGN_IDENTITY[sdk=iphonesimulator*]'] = '-'
+
+      # 6. FIX CRÍTICO: Desactivar optimización de Swift para FirebaseFunctions
+      # Evita el bug (swift_Concurrency_fatalError) del compilador de Xcode 26.4 / Swift 6.3 
+      # en la gestión de memoria de 'async let' en compilaciones Release/Profile.
+      if target.name == 'FirebaseFunctions' || target.name == 'cloud_functions'
+        config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+      end
     end
   end
 end

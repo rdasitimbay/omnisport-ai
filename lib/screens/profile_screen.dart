@@ -45,6 +45,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   DateTime? _selectedDate;
   String _currentPhotoBase64 = '';
 
+  bool _isGoogleLinked = false;
+  bool _isAppleLinked = false;
+
   @override
   void initState() {
     super.initState();
@@ -53,7 +56,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _clubController = TextEditingController(text: 'Santana (Asignado)');
     
     _ensureAuth();
+    _checkLinkedProviders();
     _loadProfileData();
+  }
+
+  void _checkLinkedProviders() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      setState(() {
+        _isGoogleLinked = user.providerData.any((info) => info.providerId == 'google.com');
+        _isAppleLinked = user.providerData.any((info) => info.providerId == 'apple.com');
+      });
+    }
   }
 
   @override
@@ -176,8 +190,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                border: Border.all(color: Colors.white.withOpacity(0.1)),
+                color: Colors.white.withValues(alpha: 0.1),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
               ),
               child: SafeArea(
                 child: Column(
@@ -251,6 +265,110 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _linkGoogle() async {
+    setState(() => _isSaving = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Usuario no autenticado.');
+      
+      AuthCredential? credential;
+      if (kIsWeb) {
+        final googleProvider = GoogleAuthProvider();
+        final result = await user.linkWithPopup(googleProvider);
+        credential = result.credential;
+      } else {
+        final GoogleSignInAccount? googleUser = await GoogleSignIn(
+          serverClientId: '430589318678-vvjddb5b9fpieq7dlodcloe1a3fkbtqp.apps.googleusercontent.com',
+        ).signIn();
+        final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
+        if (googleAuth != null) {
+          credential = GoogleAuthProvider.credential(
+            accessToken: googleAuth.accessToken,
+            idToken: googleAuth.idToken,
+          );
+          await user.linkWithCredential(credential);
+        }
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cuenta de Google vinculada ✅'), backgroundColor: Colors.green),
+        );
+      }
+      _checkLinkedProviders();
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'credential-already-in-use') {
+        _showError('Esta cuenta de Google ya está vinculada a otro usuario.');
+      } else {
+        _showError('Error al vincular Google: ${e.message}');
+      }
+    } catch (e) {
+      _showError('Error al vincular Google: $e');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _linkApple() async {
+    setState(() => _isSaving = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Usuario no autenticado.');
+
+      final appleProvider = AppleAuthProvider();
+      if (kIsWeb) {
+        await user.linkWithPopup(appleProvider);
+      } else {
+        await user.linkWithProvider(appleProvider);
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cuenta de Apple vinculada ✅'), backgroundColor: Colors.green),
+        );
+      }
+      _checkLinkedProviders();
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'credential-already-in-use') {
+        _showError('Esta cuenta de Apple ya está vinculada a otro usuario.');
+      } else {
+        _showError('Error al vincular Apple: ${e.message}');
+      }
+    } catch (e) {
+      _showError('Error al vincular Apple: $e');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _unlinkProvider(String providerId) async {
+    setState(() => _isSaving = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await user.unlink(providerId);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Cuenta desvinculada ✅'), backgroundColor: Colors.green),
+          );
+        }
+        _checkLinkedProviders();
+      }
+    } catch (e) {
+      _showError('Error al desvincular: $e');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  void _showError(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
   String _getInitials(String name) {
     if (name.isEmpty) return '??';
     List<String> parts = name.trim().split(' ');
@@ -278,7 +396,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           flexibleSpace: ClipRRect(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Container(color: Colors.white.withOpacity(0.05)),
+              child: Container(color: Colors.white.withValues(alpha: 0.05)),
             ),
           ),
         ),
@@ -351,6 +469,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   readOnly: true,
                 ),
               ),
+
+              const SizedBox(height: 32),
+              _buildSectionHeader('VINCULACIÓN DE CUENTAS'),
+              const SizedBox(height: 16),
+              _buildLinkedAccountsSection(),
               
               const SizedBox(height: 48),
               _buildBottomActions(),
@@ -363,14 +486,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   },
                   child: Text(
                     'Políticas de Privacidad y Términos',
-                    style: TextStyle(color: Colors.white.withOpacity(0.5), decoration: TextDecoration.underline, fontSize: 13),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), decoration: TextDecoration.underline, fontSize: 13),
                   ),
                 ),
               ),
               Center(
                 child: TextButton(
                   onPressed: _showDeleteConfirmationDialog,
-                  child: Text('Eliminar cuenta y datos', style: TextStyle(color: Colors.red.withOpacity(0.7), fontWeight: FontWeight.bold, fontSize: 13)),
+                  child: Text('Eliminar cuenta y datos', style: TextStyle(color: Colors.red.withValues(alpha: 0.7), fontWeight: FontWeight.bold, fontSize: 13)),
                 ),
               ),
               const SizedBox(height: 40),
@@ -396,9 +519,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.15)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
           ),
           child: child,
         ),
@@ -422,9 +545,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       validator: validator,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
-        prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.8), size: 20),
-        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+        labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 14),
+        prefixIcon: Icon(icon, color: Colors.white.withValues(alpha: 0.8), size: 20),
+        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
         focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF00E5FF))),
         contentPadding: const EdgeInsets.symmetric(vertical: 12),
       ),
@@ -438,9 +561,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: 'Género',
-        labelStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
-        prefixIcon: Icon(CupertinoIcons.person_2, color: Colors.white.withOpacity(0.8), size: 20),
-        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+        labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 14),
+        prefixIcon: Icon(CupertinoIcons.person_2, color: Colors.white.withValues(alpha: 0.8), size: 20),
+        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
         focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF00E5FF))),
       ),
       items: ['Male', 'Female', 'Other']
@@ -456,9 +579,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: InputDecorator(
         decoration: InputDecoration(
           labelText: 'Fecha de Nacimiento',
-          labelStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
-          prefixIcon: Icon(CupertinoIcons.calendar, color: Colors.white.withOpacity(0.8), size: 20),
-          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+          labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 14),
+          prefixIcon: Icon(CupertinoIcons.calendar, color: Colors.white.withValues(alpha: 0.8), size: 20),
+          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
         ),
         child: Text(
           _selectedDate == null 
@@ -480,9 +603,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             height: 140,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withOpacity(0.2), width: 3),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 3),
               boxShadow: [
-                BoxShadow(color: const Color(0xFF00E5FF).withOpacity(0.2), blurRadius: 20, spreadRadius: 2),
+                BoxShadow(color: const Color(0xFF00E5FF).withValues(alpha: 0.2), blurRadius: 20, spreadRadius: 2),
               ],
             ),
             child: CircleAvatar(
@@ -500,7 +623,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Container(
               width: 140,
               height: 140,
-              decoration: BoxDecoration(color: Colors.black.withOpacity(0.4), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4), shape: BoxShape.circle),
               child: const Center(child: CircularProgressIndicator(color: Colors.white)),
             ),
           Positioned(
@@ -520,6 +643,81 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildLinkedAccountsSection() {
+    return _buildGlassContainer(
+      child: Column(
+        children: [
+          _buildProviderRow(
+            icon: Icons.g_mobiledata,
+            label: 'Google',
+            isLinked: _isGoogleLinked,
+            onLink: _linkGoogle,
+            onUnlink: () => _unlinkProvider('google.com'),
+          ),
+          const SizedBox(height: 16),
+          Divider(color: Colors.white.withValues(alpha: 0.1)),
+          const SizedBox(height: 16),
+          _buildProviderRow(
+            icon: Icons.apple,
+            label: 'Apple',
+            isLinked: _isAppleLinked,
+            onLink: _linkApple,
+            onUnlink: () => _unlinkProvider('apple.com'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProviderRow({
+    required IconData icon,
+    required String label,
+    required bool isLinked,
+    required VoidCallback onLink,
+    required VoidCallback onUnlink,
+  }) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: Colors.white, size: 28),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ),
+        if (isLinked)
+          TextButton.icon(
+            onPressed: onUnlink,
+            icon: const Icon(CupertinoIcons.checkmark_seal_fill, color: Colors.green, size: 18),
+            label: const Text('Vinculado', style: TextStyle(color: Colors.white70)),
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.white.withValues(alpha: 0.05),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+          )
+        else
+          ElevatedButton(
+            onPressed: onLink,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+            ),
+            child: const Text('Vincular', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+      ],
+    );
+  }
+
   Widget _buildBottomActions() {
     return Container(
       width: double.infinity,
@@ -530,7 +728,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           colors: [Color(0xFF00E5FF), Color(0xFF00BFA5)],
         ),
         boxShadow: [
-          BoxShadow(color: const Color(0xFF00E5FF).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8)),
+          BoxShadow(color: const Color(0xFF00E5FF).withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 8)),
         ],
       ),
       child: Material(
@@ -556,7 +754,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
           child: AlertDialog(
             backgroundColor: const Color(0xFF001F3F),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: Colors.red.withOpacity(0.3))),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: Colors.red.withValues(alpha: 0.3))),
             title: const Text('¿Estás seguro?', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
             content: const Text('Esta acción borrará permanentemente tu perfil, fotos y rutinas.', style: TextStyle(color: Colors.white70)),
             actions: [
@@ -566,7 +764,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   try {
                     final user = FirebaseAuth.instance.currentUser;
                     if (user != null) {
-                      await _firestoreService.deleteAthleteData(user.uid);
+                      // Delega el borrado en cascada a Cloud Function (Admin SDK)
+                    // para poder eliminar la subcolección /private. Art. 16 LOPDP.
+                    await _firestoreService.requestAthleteErasure(user.uid);
                       try {
                         await GoogleSignIn().signOut();
                         await GoogleSignIn().disconnect();
@@ -586,7 +786,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     }
                   }
                 },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.withOpacity(0.8), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.withValues(alpha: 0.8), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                 child: const Text('Eliminar'),
               ),
             ],

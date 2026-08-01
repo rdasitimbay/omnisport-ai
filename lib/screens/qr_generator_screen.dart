@@ -1,65 +1,23 @@
-import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:qr_flutter/qr_flutter.dart';
-import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../widgets/secure_qr_view.dart';
 
-class QrGeneratorScreen extends StatefulWidget {
-  const QrGeneratorScreen({Key? key}) : super(key: key);
+/// Pantalla "DPO SHIELD" — Pase de Acceso QR Dinámico.
+///
+/// Migrado de JWT local (secreto hardcodeado) a [SecureQRView] que invoca
+/// `generateAttendanceToken` en el backend con HMAC-SHA256 + Master Key.
+/// El token rota cada 45 s y expira en el servidor (anti-replay).
+class QrGeneratorScreen extends StatelessWidget {
+  final String? athleteUid;
 
-  @override
-  _QrGeneratorScreenState createState() => _QrGeneratorScreenState();
-}
-
-class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
-  late Timer _timer;
-  int _secondsRemaining = 30;
-  String _qrData = '';
-  final String _jwtSecret = 'omnisport_secret_2026'; // Pre-shared temporal
-
-  @override
-  void initState() {
-    super.initState();
-    _updateState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _updateState();
-    });
-  }
-
-  void _updateState() {
-    final now = DateTime.now();
-    final int currentPeriod = now.millisecondsSinceEpoch ~/ 30000;
-    
-    // Si quedan 30 segundos plenos, en realidad significa que just now % 30 == 0
-    final int secondsLeft = 30 - (now.second % 30);
-    
-    setState(() {
-      _secondsRemaining = secondsLeft;
-      _qrData = _generateJwt(currentPeriod);
-    });
-  }
-
-  String _generateJwt(int period) {
-    final user = FirebaseAuth.instance.currentUser;
-    final jwt = JWT({
-      'uid': user?.uid ?? 'unknown_user',
-      'period': period,
-    });
-    return jwt.sign(SecretKey(_jwtSecret));
-  }
-
-  @override
-  void dispose() {
-    _timer.cancel();
-    super.dispose();
-  }
+  const QrGeneratorScreen({Key? key, this.athleteUid}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    // Calculamos el progreso inverso para la barra (de 1.0 baja a 0.0)
-    final double progress = _secondsRemaining / 30.0;
+    final user = FirebaseAuth.instance.currentUser;
+    final targetAthleteUid = athleteUid ?? user?.uid ?? '';
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -97,12 +55,15 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(32),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: Colors.white.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(32),
-                      border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        width: 1.5,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           blurRadius: 20,
                           spreadRadius: 5,
                         ),
@@ -124,74 +85,39 @@ class _QrGeneratorScreenState extends State<QrGeneratorScreen> {
                         const Text(
                           "Muestra este QR al Staff en el acceso.",
                           textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
+                          style:
+                              TextStyle(color: Colors.white70, fontSize: 14),
+                        ),
+                        const SizedBox(height: 32),
+
+                        // ── QR Dinámico Seguro ────────────────────────
+                        // SecureQRView invoca generateAttendanceToken en
+                        // el backend. El token rota cada 45 s y se valida
+                        // con HMAC-SHA256 + timingSafeEqual + anti-replay.
+                        if (targetAthleteUid.isNotEmpty)
+                          SecureQRView(athleteUid: targetAthleteUid)
+                        else
+                          const Text(
+                            'Error: sesión no válida',
+                            style: TextStyle(color: Colors.redAccent),
                           ),
-                        ),
-                        const SizedBox(height: 32),
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Anillo de Neón (Contenedor con sombra) para el "Cian glow"
-                            Container(
-                              width: 260,
-                              height: 260,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF00E5FF).withOpacity(0.4),
-                                    blurRadius: 20,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Indicador circular de progreso (el temporizador)
-                            SizedBox(
-                              width: 260,
-                              height: 260,
-                              child: CircularProgressIndicator(
-                                value: progress,
-                                strokeWidth: 8,
-                                backgroundColor: Colors.white.withOpacity(0.1),
-                                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF00E5FF)),
-                              ),
-                            ),
-                            // El Código QR rodeado en un fondo blanco redondeado
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: QrImageView(
-                                data: _qrData,
-                                version: QrVersions.auto,
-                                size: 180,
-                                foregroundColor: const Color(0xFF001F3F), 
-                                errorCorrectionLevel: QrErrorCorrectLevel.H,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 32),
+
+                        const SizedBox(height: 24),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              CupertinoIcons.clock,
+                          children: const [
+                            Icon(
+                              CupertinoIcons.shield_lefthalf_fill,
                               color: Color(0xFF00E5FF),
-                              size: 20,
+                              size: 16,
                             ),
-                            const SizedBox(width: 8),
+                            SizedBox(width: 8),
                             Text(
-                              "Expira en $_secondsRemaining s",
-                              style: const TextStyle(
-                                color: Color(0xFF00E5FF),
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                              "Token criptográfico · Servidor verificado",
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],

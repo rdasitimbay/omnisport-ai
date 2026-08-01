@@ -1,89 +1,113 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'tournament_seed_data.dart';
 
 class FirestoreService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
+  late final FirebaseAuth? _auth;
+  late final FirebaseFunctions? _functions;
 
-  // Obtener o crear datos de un atleta específico por su UID
+  FirestoreService({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+    FirebaseFunctions? functions,
+  }) : _db = firestore ?? FirebaseFirestore.instance {
+    if (auth != null) {
+      _auth = auth;
+    } else {
+      try {
+        _auth = FirebaseAuth.instance;
+      } catch (_) {
+        _auth = null;
+      }
+    }
+    if (functions != null) {
+      _functions = functions;
+    } else {
+      try {
+        _functions = FirebaseFunctions.instance;
+      } catch (_) {
+        _functions = null;
+      }
+    }
+  }
+
+  // ─── TOKEN ────────────────────────────────────────────────────────────────
+
+  // Fuerza la renovación del JWT para activar Custom Claims actualizados.
+  // Llamar obligatoriamente después de signConsent() o setUserRole() en CF.
+  // Art. 10 LOPDP: sin este paso, consent_signed y role no entran en vigor.
+  Future<void> refreshToken() async {
+    await _auth?.currentUser?.getIdToken(true);
+  }
+
+  // ─── LECTURA DE ATLETAS ───────────────────────────────────────────────────
+
+  // Stream del documento público del atleta. Las reglas Firestore garantizan
+  // que solo el owner, su coach institucional o un admin reciban datos.
   Stream<DocumentSnapshot<Map<String, dynamic>>> getAthleteData(String uid) {
     return _db.collection('athletes').doc(uid).snapshots();
   }
 
-  // Crear un perfil básico para un nuevo usuario social
-  Future<void> ensureAthleteProfile(String uid, {String? nombre, String? email}) async {
-    final doc = await _db.collection('athletes').doc(uid).get();
-    if (!doc.exists) {
-      await _db.collection('athletes').doc(uid).set({
-        'full_name': nombre ?? 'Nuevo Atleta',
-        'email': email ?? '',
-        'gender': '',
-        'birth_date': null,
-        'sport': 'Voleibol', // Disciplina por defecto
-        'rol': 'atleta',
-        'fecha_registro': FieldValue.serverTimestamp(),
-        'is_compliant_LOPDP': true,
-        'accepted_terms_at': FieldValue.serverTimestamp(),
-      });
-    }
+  // ─── ESCRITURA DE ATLETAS ─────────────────────────────────────────────────
+
+  // Actualización de campos no sensibles del perfil propio del atleta.
+  // Usa update() (no set) para que diff() en isValidAthleteUpdate() solo vea
+  // los campos enviados. Si el caller intenta pasar 'rol' o 'institutionId',
+  // Firestore rechaza la operación en la capa de reglas, no solo aquí.
+  Future<void> updateAthleteData(
+    String athleteId,
+    Map<String, dynamic> data,
+  ) {
+    data['updatedAt'] = FieldValue.serverTimestamp();
+    return _db.collection('athletes').doc(athleteId).update(data);
   }
 
-  Future<DocumentSnapshot<Map<String, dynamic>>> getOrCreateAthleteData(String uid) async {
-    final docRef = _db.collection('athletes').doc(uid);
-    final doc = await docRef.get();
-    if (!doc.exists) {
-      await docRef.set({
-        'full_name': 'Nuevo Atleta',
-        'email': '',
-        'gender': '',
-        'birth_date': null,
-        'sport': 'Voleibol',
-        'rol': 'atleta',
-        'fecha_registro': FieldValue.serverTimestamp(),
-        'is_compliant_LOPDP': true,
-        'accepted_terms_at': FieldValue.serverTimestamp(),
-      });
-      return await docRef.get();
-    }
-    return doc;
-  }
-
-  // Stream para leer los datos del primer atleta (Deprecando el uso estático)
-  Stream<QuerySnapshot<Map<String, dynamic>>> getFirstAthleteData() {
-    return _db.collection('athletes').limit(1).snapshots();
-  }
-
-  // Actualización simple a la raíz
-  Future<void> updateAthleteData(String athleteId, Map<String, dynamic> data) {
-    data['updated_at'] = FieldValue.serverTimestamp();
-    return _db.collection('athletes').doc(athleteId).set(data, SetOptions(merge: true));
-  }
-
-  // Refactor Maestro ERP - Upsert Jerárquico Strategy Pattern Transaccional
-  Future<void> upsertAthleteProfile(String uid, Map<String, dynamic> rootData, Map<String, dynamic> sportData) async {
+  // Upsert jerárquico de perfil completo (operación de admin — ingesta masiva
+  // o backoffice). La creación de documentos de atleta nunca ocurre desde el
+  // cliente de un atleta; las reglas lo rechazan con allow create: if isAdmin().
+  Future<void> upsertAthleteProfile(
+    String uid,
+    Map<String, dynamic> rootData,
+    Map<String, dynamic> sportData,
+  ) async {
     final batch = _db.batch();
 
-    // 1. Instancia de la raíz
     final rootRef = _db.collection('athletes').doc(uid);
-    rootData['updated_at'] = FieldValue.serverTimestamp();
+    rootData['updatedAt'] = FieldValue.serverTimestamp();
     batch.set(rootRef, rootData, SetOptions(merge: true));
 
-    // 2. Instancia de la Sub-Colección `sport_details/volleyball` (Strategy Pattern)
     if (sportData.containsKey('sport_type')) {
-      final String sportId = sportData['sport_type'].toString().toLowerCase();
+      final sportId = sportData['sport_type'].toString().toLowerCase();
       final sportRef = rootRef.collection('sport_details').doc(sportId);
-      sportData['updated_at'] = FieldValue.serverTimestamp();
+      sportData['updatedAt'] = FieldValue.serverTimestamp();
       batch.set(sportRef, sportData, SetOptions(merge: true));
     }
 
     await batch.commit();
   }
 
-  // Eliminar todos los datos del atleta de Firestore (ARCO - Cancelación)
-  Future<void> deleteAthleteData(String uid) {
-    return _db.collection('athletes').doc(uid).delete();
+  // ─── ELIMINACIÓN (ARCO — DERECHO AL OLVIDO) ───────────────────────────────
+
+  // Art. 16 LOPDP — Derecho al olvido: el cliente NO puede acceder a
+  // la subcolección /private directamente (solo admin por reglas).
+  // La eliminación en cascada se delega a una Cloud Function que usa
+  // Admin SDK y bypasea las reglas, garantizando borrado completo y auditado.
+  Future<void> requestAthleteErasure(String uid) async {
+    final callable = _functions?.httpsCallable('requestAthleteErasure');
+    await callable?.call({'uid': uid});
   }
 
-  // Añade un registro de sesión de entrenamiento al historial del atleta
-  Future<void> addTrainingSession(String athleteId, Map<String, dynamic> sessionData) {
+  // ─── HISTORIAL DE ENTRENAMIENTOS ──────────────────────────────────────────
+
+  // Añade una sesión al historial del atleta.
+  // Las reglas Firestore validan que el caller sea admin o coach de la
+  // misma institución del atleta (athleteInstitution() en las reglas).
+  Future<void> addTrainingSession(
+    String athleteId,
+    Map<String, dynamic> sessionData,
+  ) {
     return _db
         .collection('athletes')
         .doc(athleteId)
@@ -94,29 +118,101 @@ class FirestoreService {
         });
   }
 
-  // Obtener posiciones del torneo ordenadas por posición (1, 2, 3...)
-  Stream<QuerySnapshot<Map<String, dynamic>>> getTournamentStandings() {
-    return _db.collection('tournaments').orderBy('puntos', descending: true).snapshots();
+  // ─── TORNEOS ──────────────────────────────────────────────────────────────
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> getTournamentStandings({required String disciplina}) {
+    return _db
+        .collection('tournaments')
+        .where('disciplina', isEqualTo: disciplina.toLowerCase())
+        .snapshots();
   }
 
-  // Cargar datos de prueba para el torneo (Seed)
-  Future<void> seedTournamentData() async {
-    final batch = _db.batch();
-    final collection = _db.collection('tournaments');
+  Stream<QuerySnapshot<Map<String, dynamic>>> getTournamentMatches({required String disciplina}) {
+    return _db
+        .collection('tournament_matches')
+        .where('disciplina', isEqualTo: disciplina.toLowerCase())
+        .snapshots();
+  }
 
-    final teams = [
-      {'equipo': 'Titanes VC', 'puntos': 15, 'partidos_jugados': 5, 'posicion': 1},
-      {'equipo': 'Raptors Volei', 'puntos': 12, 'partidos_jugados': 5, 'posicion': 2},
-      {'equipo': 'Fénix Azul', 'puntos': 10, 'partidos_jugados': 5, 'posicion': 3},
-      {'equipo': 'Linces del Norte', 'puntos': 7, 'partidos_jugados': 5, 'posicion': 4},
-      {'equipo': 'Spartans Sport', 'puntos': 4, 'partidos_jugados': 5, 'posicion': 5},
-    ];
+  Future<void> registerTeam({
+    required String equipo,
+    required int color,
+    required String disciplina,
+  }) async {
+    final snap = await _db
+        .collection('tournaments')
+        .where('disciplina', isEqualTo: disciplina.toLowerCase())
+        .get();
+    final newPos = snap.docs.length + 1;
 
-    for (var team in teams) {
-      final docRef = collection.doc();
-      batch.set(docRef, team);
+    await _db.collection('tournaments').add({
+      'posicion': newPos,
+      'equipo': equipo,
+      'partidos_jugados': 0,
+      'ganados': 0,
+      'empatados': 0,
+      'perdidos': 0,
+      'goles_favor': 0,
+      'goles_contra': 0,
+      'puntos': 0,
+      'color': color,
+      'disciplina': disciplina.toLowerCase(),
+    });
+  }
+
+  Future<void> scheduleMatch({
+    required String local,
+    required String visitante,
+    required String jornada,
+    required String cancha,
+    required String fecha,
+    required String hora,
+    required String estado,
+    required String disciplina,
+  }) {
+    return _db.collection('tournament_matches').add({
+      'jornada': jornada,
+      'fecha': fecha,
+      'hora': hora,
+      'cancha': cancha,
+      'local': local,
+      'visitante': visitante,
+      'goles_local': 0,
+      'goles_visitante': 0,
+      'estado': estado, // PROGRAMADO o LIVEMATCH
+      'disciplina': disciplina.toLowerCase(),
+    });
+  }
+
+  Future<void> seedTournamentDemoData() async {
+    // 1. Limpiar standings y partidos antiguos en un lote inicial para evitar errores de sincronización de caché local
+    final deleteBatch = _db.batch();
+    
+    final standingsSnap = await _db.collection('tournaments').get();
+    for (var doc in standingsSnap.docs) {
+      deleteBatch.delete(doc.reference);
     }
 
-    return batch.commit();
+    final matchesSnap = await _db.collection('tournament_matches').get();
+    for (var doc in matchesSnap.docs) {
+      deleteBatch.delete(doc.reference);
+    }
+    
+    await deleteBatch.commit();
+
+    // 2. Escribir nuevos standings y partidos semillas en un lote secundario
+    final writeBatch = _db.batch();
+
+    for (var standing in TournamentSeedData.standings) {
+      final ref = _db.collection('tournaments').doc();
+      writeBatch.set(ref, standing);
+    }
+
+    for (var match in TournamentSeedData.matches) {
+      final ref = _db.collection('tournament_matches').doc();
+      writeBatch.set(ref, match);
+    }
+
+    await writeBatch.commit();
   }
 }

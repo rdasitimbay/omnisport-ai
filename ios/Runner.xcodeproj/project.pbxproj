@@ -207,6 +207,7 @@
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				6853B044A47DC48FC8EF629E /* [CP] Embed Pods Frameworks */,
 				26921B3FC0D9AA74B8ED8A72 /* [CP] Copy Pods Resources */,
+				A1B2C3D4E5F60001A2B3C4D5 /* Strip Extended Attributes */,
 			);
 			buildRules = (
 			);
@@ -386,7 +387,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build";
+			shellScript = "# Shim codesign to strip xattrs (com.apple.FinderInfo, com.apple.fileprovider.fpfs#P) on macOS Tahoe\nSHIM_DIR=$(mktemp -d)\ncat > \"$SHIM_DIR/codesign\" << 'SHIM_EOF'\n#!/bin/bash\nfor arg in \"$@\"; do\n  if [ -e \"$arg\" ]; then\n    xattr -cr \"$arg\" 2>/dev/null || true\n    parent=$(dirname \"$arg\")\n    if [[ \"$parent\" == *.framework ]]; then\n      xattr -cr \"$parent\" 2>/dev/null || true\n    fi\n  fi\ndone\nexec /usr/bin/codesign --no-strict \"$@\"\nSHIM_EOF\nchmod +x \"$SHIM_DIR/codesign\"\nexport PATH=\"$SHIM_DIR:$PATH\"\n/bin/sh \"$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh\" build\nrm -rf \"$SHIM_DIR\"\n";
+		};
+		A1B2C3D4E5F60001A2B3C4D5 /* Strip Extended Attributes */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Strip Extended Attributes";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Strip xattrs that block codesign (com.apple.FinderInfo, com.apple.fileprovider.fpfs#P)\nBUILD_IOS=\"${PROJECT_DIR}/../build/ios\"\nif [ -d \"$BUILD_IOS\" ]; then\n  find \"$BUILD_IOS\" \\( -name \"*.framework\" -o -name \"*.app\" -o -name \"*.appex\" \\) -type d | while IFS= read -r bundle; do\n    xattr -cr \"$bundle\" 2>/dev/null || true\n  done\nfi\ntrue\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -486,6 +502,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
+				OTHER_CODE_SIGN_FLAGS = "--no-strict";
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = iphoneos;

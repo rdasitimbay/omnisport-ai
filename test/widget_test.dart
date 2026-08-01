@@ -1,30 +1,42 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:app/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:app/screens/splash_screen.dart';
+import 'package:app/services/preferences_service.dart';
+import 'package:app/l10n/app_localizations.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const OmniSportApp());
+  testWidgets('Splash Screen smoke test - verifies rendering and branding text', (WidgetTester tester) async {
+    // Initialize SharedPreferences mock
+    SharedPreferences.setMockInitialValues({});
+    await PreferencesService().init();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Pump SplashScreen inside a MaterialApp with proper translation delegates
+    await tester.pumpWidget(const MaterialApp(
+      home: SplashScreen(),
+      localizationsDelegates: [
+        AppLocalizationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: [Locale('es', ''), Locale('en', '')],
+    ));
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    // Allow asynchronous localizations loading to complete and mount SplashScreen
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Verify that SplashScreen mounts and shows the branding text
+    expect(find.byType(SplashScreen), findsOneWidget);
+    expect(find.text('POWERED BY ROMMEL ASITIMBAY MORALES'), findsOneWidget);
+
+    // Allow the routing delay timer to complete and execute navigation
+    await tester.pumpAndSettle(const Duration(seconds: 3));
+
   });
 }
+
+
+
+

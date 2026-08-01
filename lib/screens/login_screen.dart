@@ -2,12 +2,15 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:flutter/foundation.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../l10n/app_localizations.dart';
+import '../services/preferences_service.dart';
 import 'terms_screen.dart';
 import 'language_picker_screen.dart';
+import 'onboarding_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -31,20 +34,27 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
     try {
+      UserCredential? userCredential;
       if (kIsWeb) {
-        GoogleAuthProvider googleProvider = GoogleAuthProvider();
-        await FirebaseAuth.instance.signInWithRedirect(googleProvider);
+        // signInWithPopup devuelve el UserCredential directamente en el mismo await.
+        // signInWithRedirect navega fuera de la app y requiere getRedirectResult()
+        // en initState para procesar el resultado — mucho más frágil en desarrollo.
+        final googleProvider = GoogleAuthProvider();
+        userCredential = await FirebaseAuth.instance.signInWithPopup(googleProvider);
       } else {
-        final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+        final GoogleSignInAccount? googleUser = await GoogleSignIn(
+          serverClientId: '430589318678-vvjddb5b9fpieq7dlodcloe1a3fkbtqp.apps.googleusercontent.com',
+        ).signIn();
         final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
         if (googleAuth != null) {
           final credential = GoogleAuthProvider.credential(
             accessToken: googleAuth.accessToken,
             idToken: googleAuth.idToken,
           );
-          await FirebaseAuth.instance.signInWithCredential(credential);
+          userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
         }
       }
+      if (userCredential?.user != null) await _ensureUserProfile(userCredential!.user!);
     } on FirebaseAuthException catch (e) {
       final loc = AppLocalizations.of(context);
       String message = loc.loginErrorGoogle;
@@ -60,6 +70,34 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _ensureUserProfile(User user) async {
+    final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final docSnap = await docRef.get();
+    if (!docSnap.exists) {
+      final role = (user.email == 'asitimbay.rommel@gmail.com' || user.email == 'admin@omnisport.ai') ? 'admin' : 'user';
+      await docRef.set({
+        'email': user.email ?? 'Sin correo',
+        'role': role,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Si aún no hay vínculo con un documento de atleta, intentar el auto-link.
+    // La CF linkAthleteAccount busca por email_hash en sensitive_data y guarda
+    // el athleteDocId en users/{uid} para que AuthGateway pueda enrutar correctamente.
+    final refreshed = await docRef.get();
+    if (refreshed.data()?['athleteDocId'] == null &&
+        refreshed.data()?['role'] != 'admin') {
+      try {
+        await FirebaseFunctions.instance
+            .httpsCallable('linkAthleteAccount')
+            .call();
+      } catch (e) {
+        debugPrint('linkAthleteAccount: $e');
+      }
+    }
+  }
+
   Future<void> _signInWithApple() async {
     setState(() => _isLoading = true);
     try {
@@ -67,7 +105,8 @@ class _LoginScreenState extends State<LoginScreen> {
       if (kIsWeb) {
         await FirebaseAuth.instance.signInWithRedirect(appleProvider);
       } else {
-        await FirebaseAuth.instance.signInWithProvider(appleProvider);
+        final userCredential = await FirebaseAuth.instance.signInWithProvider(appleProvider);
+        if (userCredential.user != null) await _ensureUserProfile(userCredential.user!);
       }
     } catch (e) {
       final loc = AppLocalizations.of(context);
@@ -101,21 +140,24 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       if (_isLogin) {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
+        final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: email,
           password: password,
         );
+        if (userCredential.user != null) await _ensureUserProfile(userCredential.user!);
       } else {
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
           email: email,
           password: password,
         );
+        if (userCredential.user != null) await _ensureUserProfile(userCredential.user!);
       }
     } on FirebaseAuthException catch (e) {
       final loc = AppLocalizations.of(context);
       String message = loc.loginErrorGeneric;
       if (e.code == 'user-not-found') message = loc.loginErrorNotFound;
       if (e.code == 'wrong-password') message = loc.loginErrorWrongPass;
+      if (e.code == 'invalid-credential') message = 'Correo o contraseña incorrectos';
       if (e.code == 'email-already-in-use') message = loc.loginErrorEmailUsed;
       if (e.code == 'weak-password') message = loc.loginErrorWeakPass;
       if (e.code == 'operation-not-allowed') {
@@ -136,10 +178,10 @@ class _LoginScreenState extends State<LoginScreen> {
       labelStyle: const TextStyle(color: Colors.white70),
       prefixIcon: Icon(icon, color: Colors.white70),
       filled: true,
-      fillColor: Colors.white.withOpacity(0.1),
+      fillColor: Colors.white.withValues(alpha: 0.1),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
@@ -158,6 +200,21 @@ class _LoginScreenState extends State<LoginScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          // Botón debug-only: reinicia onboarding para pruebas
+          if (kDebugMode)
+            IconButton(
+              icon: const Icon(CupertinoIcons.arrow_counterclockwise, color: Colors.white54, size: 22),
+              tooltip: 'Reiniciar onboarding (debug)',
+              onPressed: () async {
+                final prefs = PreferencesService();
+                await prefs.setHasSeenOnboarding(false);
+                if (!context.mounted) return;
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+                );
+              },
+            ),
           IconButton(
             icon: const Icon(CupertinoIcons.globe, color: Colors.white, size: 28),
             onPressed: () {
@@ -189,7 +246,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                         blurRadius: 30,
                         spreadRadius: 10,
                       )
@@ -217,10 +274,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(32.0),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
+                        color: Colors.white.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(32),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.2), 
+                          color: Colors.white.withValues(alpha: 0.2), 
                           width: 1.5,
                         ),
                       ),
@@ -255,8 +312,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: Text(
                                 loc.loginTerms,
                                 style: const TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 14,
                                   color: Colors.white,
+                                  fontWeight: FontWeight.bold,
                                   decoration: TextDecoration.underline,
                                   decorationColor: Colors.white,
                                 ),
@@ -264,16 +322,27 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             controlAffinity: ListTileControlAffinity.leading,
                             contentPadding: EdgeInsets.zero,
-                            activeColor: Colors.white,
-                            checkColor: const Color(0xFF003F87),
-                            side: const BorderSide(color: Colors.white70),
+                            activeColor: Colors.orange, // High contrast
+                            checkColor: Colors.black,
+                            side: const BorderSide(color: Colors.white, width: 2),
                           ),
                           const SizedBox(height: 24),
                           SizedBox(
                             width: double.infinity,
                             height: 55,
                             child: ElevatedButton(
-                              onPressed: (_isLoading || !_acceptedTerms) ? null : _submit,
+                              onPressed: () {
+                                if (!_acceptedTerms) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Debes aceptar los términos para continuar'), backgroundColor: Colors.orange),
+                                  );
+                                  return;
+                                }
+                                if (!_isLoading) {
+                                  debugPrint("--- INTENTANDO LOGIN ---");
+                                  _submit();
+                                }
+                              },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.white,
                                 foregroundColor: const Color(0xFF003F87),
@@ -294,12 +363,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(height: 24),
                           Row(
                             children: [
-                              Expanded(child: Divider(color: Colors.white.withOpacity(0.3))),
+                              Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.3))),
                               Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 16),
                                 child: Text(loc.loginOr, style: const TextStyle(color: Colors.white70, fontSize: 12)),
                               ),
-                              Expanded(child: Divider(color: Colors.white.withOpacity(0.3))),
+                              Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.3))),
                             ],
                           ),
                           const SizedBox(height: 24),
@@ -349,8 +418,8 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          border: Border.all(color: Colors.white.withOpacity(0.3)),
+          color: Colors.white.withValues(alpha: 0.1),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(

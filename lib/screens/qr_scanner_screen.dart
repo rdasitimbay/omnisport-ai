@@ -1,43 +1,115 @@
-import 'dart:ui';
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:app/utils/scanner_logic.dart';
-import 'package:app/models/athlete.dart'; // Importante: importar el modelo
+import 'package:app/models/athlete.dart';
+import '../services/offline_sync_service.dart';
+import '../services/rbac_service.dart';
+import 'referee_verify_screen.dart';
 
-enum ScanState { scanningAthlete, loadingAthlete, success, waitingGuardian, scanningGuardian, invalid }
+
+enum ScanState {
+  scanningAthlete,
+  loadingAthlete,
+  success,
+  waitingGuardian,
+  scanningGuardian,
+  invalid,
+}
 
 class QrScannerScreen extends StatefulWidget {
-  const QrScannerScreen({Key? key}) : super(key: key);
+  final FirebaseFirestore? firestore;
+  final bool isTestMode;
+  const QrScannerScreen({Key? key, this.firestore, this.isTestMode = false})
+    : super(key: key);
 
   @override
   _QrScannerScreenState createState() => _QrScannerScreenState();
 }
 
 class _QrScannerScreenState extends State<QrScannerScreen> {
-  final MobileScannerController _scannerController = MobileScannerController(
-    detectionSpeed: DetectionSpeed.normal, // Cambiado para evitar bloqueo en Android
-  );
-  
-  // Caché de simulacion offline (TKT-004)
-  final Map<String, dynamic> _offlineLogsMap = {};
+  MobileScannerController? _scannerController;
+
+  bool _checkingRole = true;
+  bool _authorized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSecurityRole();
+  }
+
+  Future<void> _checkSecurityRole() async {
+    if (widget.isTestMode) {
+      setState(() {
+        _checkingRole = false;
+        _authorized = true;
+      });
+      _initScannerController();
+      return;
+    }
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          final role = RbacService.normalize(doc.data()?['role'] as String?);
+          if (RbacService.canManageAthletes(role)) {
+            if (mounted) {
+              setState(() {
+                _authorized = true;
+                _checkingRole = false;
+              });
+            }
+            _initScannerController();
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error al validar rol de seguridad: $e");
+    }
+
+    if (mounted) {
+      setState(() {
+        _checkingRole = false;
+        _authorized = false;
+      });
+    }
+  }
+
+  void _initScannerController() {
+    if (!widget.isTestMode) {
+      _scannerController = MobileScannerController(
+        detectionSpeed: DetectionSpeed.normal,
+      );
+    }
+  }
+
+  // El caché de simulación offline fue reemplazado por OfflineSyncService (TKT-004)
 
   ScanState _currentState = ScanState.scanningAthlete;
-  
+
+  // Toggle Ingreso/Salida — seleccionable por el Staff antes de escanear.
+  bool _isEntry = true;
+  String get _actionLabel => _isEntry ? 'ingreso' : 'salida';
+
   // Datos temporales tras escaneo
   String? _scannedUid;
-  Map<String, dynamic>? _athleteData;
   String _message = 'Escanea el pase del Atleta';
   bool _isProcessing = false;
   DateTime? _lastScanTime; // Para Debounce manual
 
   @override
   void dispose() {
-    _scannerController.dispose();
+    _scannerController?.dispose();
     super.dispose();
   }
 
@@ -45,11 +117,12 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     if (_isProcessing) return;
 
     // Filtro Debounce (2 segundos) para no bloquear la lectura del mismo código
-    if (_lastScanTime != null && DateTime.now().difference(_lastScanTime!).inSeconds < 2) {
+    if (_lastScanTime != null &&
+        DateTime.now().difference(_lastScanTime!).inSeconds < 2) {
       return;
     }
     _lastScanTime = DateTime.now();
-    
+
     final List<Barcode> barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
 
@@ -58,7 +131,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Detectado: ${rawValue.trim()}', style: const TextStyle(fontWeight: FontWeight.bold)),
+          content: Text(
+            'Detectado: ${rawValue.trim()}',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
           backgroundColor: Colors.blueAccent,
           duration: const Duration(seconds: 4),
         ),
@@ -73,47 +149,122 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     await _processQR(jwtToken);
   }
 
+  bool _isSmartIdToken(String raw) {
+    final parts = raw.split('.');
+    if (parts.length != 3) return false;
+    try {
+      final padded = base64Url.normalize(parts[0]);
+      final header = json.decode(utf8.decode(base64Url.decode(padded))) as Map;
+      return header['typ'] == 'SMART_ID';
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _processQR(String jwtToken) async {
-    setState(() { _isProcessing = true; });
-
-    final validacion = ScannerLogic.validar(jwtToken);
-
-    if (validacion.status == ScanStatus.ilegible) {
-      _setInvalid("Código QR Ilegible o Falso");
-      return;
-    } else if (validacion.status == ScanStatus.expirado) {
-      _setInvalid("QR Expirado o Inválido");
+    // Route Smart ID tokens (JWT dot-separated) to referee verification flow.
+    if (_isSmartIdToken(jwtToken)) {
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => RefereeVerifyScreen(token: jwtToken)),
+      );
+      if (mounted) setState(() => _isProcessing = false);
       return;
     }
 
-    final String uid = validacion.uid!;
+    final originalState = _currentState;
+    setState(() {
+      _isProcessing = true;
+      if (originalState != ScanState.waitingGuardian) {
+        _currentState = ScanState.loadingAthlete;
+      }
+    });
 
-    if (_currentState == ScanState.scanningAthlete) {
+    // 1. Obtener Geofencing (Ubicación) — omitido en test mode (plugins nativos no disponibles)
+    Map<String, dynamic>? locationData;
+    if (!widget.isTestMode) {
+      try {
+        var permission = await Geolocator.checkPermission();
+        if (permission == LocationPermission.denied) {
+          permission = await Geolocator.requestPermission();
+        }
+        if (permission != LocationPermission.deniedForever &&
+            (permission == LocationPermission.whileInUse ||
+             permission == LocationPermission.always)) {
+          final position = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 5),
+            ),
+          );
+          locationData = {
+            'latitude': position.latitude,
+            'longitude': position.longitude,
+          };
+        }
+      } catch (e) {
+        debugPrint("Geofencing Error: $e");
+      }
+    }
+
+    // 2. Validar Token en Backend
+    String resolvedUid = '';
+    if (widget.isTestMode) {
+      // En modo test el "token" es el UID directamente — bypass de CF para tests unitarios.
+      // La lógica de validación de CF se cubre en backoffice_integration_test.dart.
+      resolvedUid = jwtToken;
+    } else {
+      try {
+        final result = await FirebaseFunctions.instance
+            .httpsCallable('validateAttendanceToken')
+            .call({
+          'token': jwtToken,
+          'action': _actionLabel,
+          'location': locationData,
+        });
+
+        if (result.data['success'] == true) {
+          final parts = jwtToken.split(':');
+          resolvedUid = parts.length >= 3 ? parts[0] : jwtToken;
+        }
+      } catch (e) {
+        if (e is FirebaseFunctionsException) {
+          _setInvalid(e.message ?? "Token Inválido o Falso");
+        } else {
+          _setInvalid("Error de Red al Validar");
+        }
+        return;
+      }
+    }
+
+    if (originalState == ScanState.loadingAthlete || originalState == ScanState.scanningAthlete) {
       if (mounted) {
         setState(() {
-          _scannedUid = uid;
+          _scannedUid = resolvedUid;
           _currentState = ScanState.loadingAthlete;
         });
       }
 
-      await Future.delayed(const Duration(milliseconds: 600)); // Efecto dramático de red para ver el Skeleton
+      // Skeleton loading delay — omitido en test mode (FakeAsync no avanza sin pump)
+      if (!widget.isTestMode) {
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (!mounted) return;
+      }
 
       try {
-        final doc = await FirebaseFirestore.instance.collection('athletes').doc(uid).get();
+        final doc = await (widget.firestore ?? FirebaseFirestore.instance)
+            .collection('athletes')
+            .doc(resolvedUid)
+            .get();
         if (!doc.exists) {
-          _setInvalid("Usuario ($uid) no encontrado en BD");
+          _setInvalid("Usuario ($resolvedUid) no encontrado en BD");
           return;
         }
 
         final data = doc.data()!;
         final bool isMinor = _checkIfMinor(data);
-        // Aunque tenemos data aquí, UI usará un StreamBuilder para pintar el modelo Athlete
-        
-        if (mounted) {
-          setState(() {
-            _athleteData = data;
-          });
-        }
+        // UI usa StreamBuilder para pintar el modelo Athlete
 
         if (isMinor) {
           if (mounted) {
@@ -124,17 +275,18 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
             });
           }
         } else {
-          _logAccess(uid, "athlete_solo");
-          _simulateOpalAINotification(uid, data['fullName'] ?? 'Atleta'); // Opal AI Simulated Local Push
-          _setSuccess("Ingreso Apto");
+          // La Cloud Function ya registró el log y envió el Push (Sprint 4)
+          // Solo registramos el log offline como backup si se desea, o delegamos todo a la nube.
+          if (!widget.isTestMode) _logAccess(resolvedUid, "athlete_solo");
+          _setSuccess(_isEntry ? "Ingreso Apto" : "Salida Registrada");
         }
       } catch (e) {
-        print("ERROR EN FIRESTORE: $e");
-        _setInvalid("Data Error: $e");
+        debugPrint("ERROR EN FIRESTORE: $e");
+        _setInvalid("Error al cargar datos del atleta");
       }
-    } else if (_currentState == ScanState.waitingGuardian) {
+    } else if (originalState == ScanState.waitingGuardian) {
       // Asumimos que el 2do QR es del tutor autorizando.
-      _logAccess(_scannedUid!, "athlete_with_guardian_$uid");
+      if (!widget.isTestMode) _logAccess(_scannedUid!, "athlete_with_guardian_$resolvedUid");
       _setSuccess("Match Completado\nIngreso Apto");
     }
   }
@@ -143,11 +295,17 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     if (data.containsKey('isMinor')) {
       return data['isMinor'] == true;
     }
-    if (data.containsKey('fecha_nacimiento') && data['fecha_nacimiento'] != null) {
+    if (data.containsKey('fecha_nacimiento') &&
+        data['fecha_nacimiento'] != null) {
       final String dob = data['fecha_nacimiento'];
       try {
         final date = DateTime.parse(dob);
-        final age = DateTime.now().year - date.year;
+        final now  = DateTime.now();
+        var age = now.year - date.year;
+        if (now.month < date.month ||
+            (now.month == date.month && now.day < date.day)) {
+          age--;
+        }
         return age < 18;
       } catch (_) {}
     }
@@ -156,23 +314,19 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   }
 
   void _logAccess(String uid, String method) {
-    final timestamp = DateTime.now().toIso8601String();
-    _offlineLogsMap['$uid-$timestamp'] = {
-      'uid': uid,
-      'timestamp': timestamp,
-      'method': method,
-      'synced': false // flag offline (preparación para TKT-004)
+    final clientMs = DateTime.now().millisecondsSinceEpoch;
+    final logData = {
+      'sync_type': 'access_log',
+      'athleteId': uid,
+      'scannedByUid': FirebaseAuth.instance.currentUser?.uid ?? 'unknown',
+      'eventType': _isEntry ? 'ENTRY' : 'EXIT',
+      'clientMs': clientMs,
     };
-    print("LOG OFFLINE SAVED: ${_offlineLogsMap['$uid-$timestamp']}");
-  }
 
-  void _simulateOpalAINotification(String uid, String name) {
-    // Fase 1: Simulación Local (Spark Plan Cost Zero)
-    final time = DateTime.now().toString().substring(11, 16);
-    debugPrint("------------------------------------------");
-    debugPrint("🔔 OPAL AI PUSH NOTIFICATION (Simulada)");
-    debugPrint("Mensaje: Opal AI informa: $name ha ingresado al complejo a las $time");
-    debugPrint("------------------------------------------");
+    // Fuego y olvido: guardar localmente e intentar sincronizar
+    OfflineSyncService.saveModelLocally(logData).then((_) {
+      OfflineSyncService.syncLogs(firestore: widget.firestore);
+    });
   }
 
   void _setSuccess(String msg) {
@@ -191,7 +345,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       _message = msg;
     });
     Future.delayed(const Duration(seconds: 2), () {
-      if (mounted && _currentState != ScanState.waitingGuardian) _resetScanner();
+      if (mounted && _currentState != ScanState.waitingGuardian)
+        _resetScanner();
     });
   }
 
@@ -200,61 +355,174 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       _currentState = ScanState.scanningAthlete;
       _message = 'Escanea el pase del Atleta';
       _isProcessing = false;
-      _athleteData = null;
       _scannedUid = null;
     });
-    
+
     // IMPORTANTE PARA ANDROID: Reactiva el controlador para continuar leyendo
-    try {
-      _scannerController.start();
-    } catch (_) {}
+    if (!widget.isTestMode && _scannerController != null) {
+      try {
+        _scannerController!.start();
+      } catch (_) {}
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_checkingRole) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0A192F),
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+              colors: [Color(0xFF001F3F), Color(0xFF0A192F)],
+            ),
+          ),
+          child: const Center(
+            child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+          ),
+        ),
+      );
+    }
+
+    if (!_authorized) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0A192F),
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text('Acceso Denegado', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+              colors: [Color(0xFF001F3F), Color(0xFF0A192F)],
+            ),
+          ),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32.0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                  child: Container(
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3), width: 1.5),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.gavel_rounded, color: Colors.redAccent, size: 48),
+                        ),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'Seguridad Zero Trust',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Solo el personal autorizado (Entrenador / Administrador) puede iniciar el escáner de control de acceso.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Tu intento de acceso ha sido denegado y auditado por seguridad (Art. 10 LOPDP).',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.4),
+                        ),
+                        const SizedBox(height: 28),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withValues(alpha: 0.1),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Volver al Portal', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Zero Trust Scanner', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+        title: const Text(
+          'Zero Trust Scanner',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          // ── Toggle Ingreso / Salida ──────────────────────────────
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: _buildActionToggle(),
+          ),
+        ],
       ),
       body: Stack(
         children: [
           // Mobile Scanner Fullscreen
-          MobileScanner(
-            controller: _scannerController,
-            onDetect: _onDetect,
-          ),
-          
+          if (!widget.isTestMode && _scannerController != null)
+            MobileScanner(controller: _scannerController!, onDetect: _onDetect),
+
           // Overlay Oscurecido para enfoque
           Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.4)
-            ),
+            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4)),
           ),
-          
+
           // Viewport del Scanner
           Center(
             child: Container(
               width: 250,
               height: 250,
               decoration: BoxDecoration(
-                border: Border.all(
-                  color: _getNeonColor(),
-                  width: 3,
-                ),
+                border: Border.all(color: _getNeonColor(), width: 3),
                 borderRadius: BorderRadius.circular(32),
                 boxShadow: [
-                  BoxShadow(color: _getNeonColor().withOpacity(0.3), blurRadius: 20, spreadRadius: 2)
-                ]
+                  BoxShadow(
+                    color: _getNeonColor().withValues(alpha: 0.3),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                  ),
+                ],
               ),
             ),
           ),
-          
+
           // Texto Guía Superior
-          if (_currentState == ScanState.scanningAthlete || _currentState == ScanState.waitingGuardian)
+          if (_currentState == ScanState.scanningAthlete ||
+              _currentState == ScanState.waitingGuardian)
             Positioned(
               top: MediaQuery.of(context).size.height * 0.2,
               left: 20,
@@ -274,12 +542,12 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
           // Modal Diamond Glass Ofuscado Bottom
           if (_currentState != ScanState.scanningAthlete)
-             Positioned(
-               bottom: 80,
-               left: 24,
-               right: 24,
-               child: _buildDiamondModal(),
-             )
+            Positioned(
+              bottom: 80,
+              left: 24,
+              right: 24,
+              child: _buildDiamondModal(),
+            ),
         ],
       ),
     );
@@ -301,6 +569,58 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     }
   }
 
+  /// Toggle pill para seleccionar Ingreso / Salida antes de escanear.
+  Widget _buildActionToggle() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _toggleOption('Ingreso', Icons.login, true),
+          _toggleOption('Salida', Icons.logout, false),
+        ],
+      ),
+    );
+  }
+
+  Widget _toggleOption(String label, IconData icon, bool isEntry) {
+    final selected = _isEntry == isEntry;
+    final color = isEntry
+        ? const Color(0xFF00E5FF)  // Cyan para ingreso
+        : const Color(0xFFFFAB40); // Naranja para salida
+    return GestureDetector(
+      onTap: () => setState(() => _isEntry = isEntry),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? color.withValues(alpha: 0.25) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: selected ? color : Colors.white38),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? color : Colors.white38,
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
   Widget _buildDiamondModal() {
     final neonColor = _getNeonColor();
 
@@ -315,14 +635,18 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.12),
+              color: Colors.white.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(32),
-              border: Border.all(color: neonColor.withOpacity(0.6), width: 1.5),
+              border: Border.all(color: neonColor.withValues(alpha: 0.6), width: 1.5),
               boxShadow: [
-                 BoxShadow(color: neonColor.withOpacity(0.15), blurRadius: 20, spreadRadius: 0)
-              ]
+                BoxShadow(
+                  color: neonColor.withValues(alpha: 0.15),
+                  blurRadius: 20,
+                  spreadRadius: 0,
+                ),
+              ],
             ),
-            child: _currentState == ScanState.loadingAthlete 
+            child: _currentState == ScanState.loadingAthlete
                 ? _buildSkeletonLoader(neonColor)
                 : _buildModalContent(neonColor),
           ),
@@ -334,13 +658,17 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   Widget _buildSkeletonLoader(Color neonColor) {
     return Shimmer.fromColors(
       baseColor: Colors.white30,
-      highlightColor: neonColor.withOpacity(0.6),
+      highlightColor: neonColor.withValues(alpha: 0.6),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 80, height: 80,
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+            width: 80,
+            height: 80,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
           ),
           const SizedBox(height: 16),
           Container(width: 150, height: 24, color: Colors.white),
@@ -359,9 +687,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: baseNeonColor.withOpacity(0.15),
+              color: baseNeonColor.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: baseNeonColor.withOpacity(0.5))
+              border: Border.all(color: baseNeonColor.withValues(alpha: 0.5)),
             ),
             child: Text(
               _message,
@@ -370,7 +698,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 color: baseNeonColor,
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
-                letterSpacing: 1.5
+                letterSpacing: 1.5,
               ),
             ),
           ),
@@ -379,7 +707,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     }
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('athletes').doc(_scannedUid).snapshots(),
+      stream: (widget.firestore ?? FirebaseFirestore.instance)
+          .collection('athletes')
+          .doc(_scannedUid)
+          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           print("ERROR EN STREAM: ${snapshot.error}");
@@ -389,24 +720,37 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
           return _buildSkeletonLoader(baseNeonColor);
         }
 
-        final model = Athlete.fromMap(_scannedUid!, snapshot.data!.data() as Map<String, dynamic>);
-        
+        // iOS fix: Map.from() evita crash con Map<Object?, Object?>
+        final rawAthleteData = snapshot.data!.data();
+        final model = Athlete.fromMap(
+          _scannedUid!,
+          rawAthleteData != null ? Map<String, dynamic>.from(rawAthleteData as Map) : {},
+        );
+
         // Lógica de Semáforo Diamond Glass (basado en status)
         Color finalNeonColor = baseNeonColor;
         String displayStatus = "INGRESO APTO";
-        
+
         // Removemos acentos comunes para la sanitización y evitamos fallos de string
-        String lowerStatus = model.status.trim().toLowerCase()
-          .replaceAll('á', 'a').replaceAll('é', 'e')
-          .replaceAll('í', 'i').replaceAll('ó', 'o').replaceAll('ú', 'u');
-        
-        if (lowerStatus.contains('acceso autorizado') || lowerStatus.contains('al dia')) {
+        String lowerStatus = model.status
+            .trim()
+            .toLowerCase()
+            .replaceAll('á', 'a')
+            .replaceAll('é', 'e')
+            .replaceAll('í', 'i')
+            .replaceAll('ó', 'o')
+            .replaceAll('ú', 'u');
+
+        if (lowerStatus.contains('acceso autorizado') ||
+            lowerStatus.contains('al dia')) {
           finalNeonColor = const Color(0xFF50C878); // Verde Esmeralda
           displayStatus = "ACCESO AUTORIZADO / AL DÍA";
         } else if (lowerStatus.contains('pago pendiente')) {
           finalNeonColor = const Color(0xFFFFBF00); // Naranja Ámbar
           displayStatus = "PAGO PENDIENTE";
-        } else if (lowerStatus.contains('vencida') || lowerStatus.contains('vencido') || lowerStatus.contains('denegado')) {
+        } else if (lowerStatus.contains('vencida') ||
+            lowerStatus.contains('vencido') ||
+            lowerStatus.contains('denegado')) {
           finalNeonColor = const Color(0xFFDC143C); // Rojo Carmesí
           displayStatus = "ACCESO DENEGADO";
         } else if (lowerStatus.contains('inactivo')) {
@@ -426,35 +770,56 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 shape: BoxShape.circle,
                 border: Border.all(color: finalNeonColor, width: 2),
                 boxShadow: [
-                  BoxShadow(color: finalNeonColor.withOpacity(0.3), blurRadius: 15)
-                ]
+                  BoxShadow(
+                    color: finalNeonColor.withValues(alpha: 0.3),
+                    blurRadius: 15,
+                  ),
+                ],
               ),
               child: CircleAvatar(
                 backgroundColor: Colors.white24,
-                backgroundImage: model.photoUrl.isNotEmpty ? NetworkImage(model.photoUrl) : null,
-                child: model.photoUrl.isEmpty ? const Icon(CupertinoIcons.person_fill, color: Colors.white, size: 40) : null,
+                backgroundImage: model.photoUrl.isNotEmpty
+                    ? NetworkImage(model.photoUrl)
+                    : null,
+                child: model.photoUrl.isEmpty
+                    ? const Icon(
+                        CupertinoIcons.person_fill,
+                        color: Colors.white,
+                        size: 40,
+                      )
+                    : null,
               ),
             ),
             const SizedBox(height: 16),
             Text(
               model.fullName.split(' ').first.toUpperCase(),
-              style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 2.0),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2.0,
+              ),
             ),
             if (model.teamOrCategory.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
                   model.teamOrCategory.toUpperCase(),
-                  style: TextStyle(color: finalNeonColor.withOpacity(0.8), fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 1.2),
+                  style: TextStyle(
+                    color: finalNeonColor.withValues(alpha: 0.8),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                  ),
                 ),
               ),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: finalNeonColor.withOpacity(0.15),
+                color: finalNeonColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: finalNeonColor.withOpacity(0.5))
+                border: Border.all(color: finalNeonColor.withValues(alpha: 0.5)),
               ),
               child: Text(
                 _currentState == ScanState.success ? displayStatus : _message,
@@ -463,7 +828,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                   color: finalNeonColor,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5
+                  letterSpacing: 1.5,
                 ),
               ),
             ),
@@ -471,9 +836,9 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               const Padding(
                 padding: EdgeInsets.only(top: 16.0),
                 child: CircularProgressIndicator(color: Colors.orangeAccent),
-                )
-            ],
-          );
+              ),
+          ],
+        );
       },
     );
   }

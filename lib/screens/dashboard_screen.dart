@@ -4,17 +4,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firestore_service.dart';
+import '../services/rbac_service.dart';
+import '../widgets/role_gate.dart';
 import 'training_screen.dart';
+import 'velocity_kinetic/kinetic_lab_screen.dart';
 import 'profile_screen.dart';
 import 'tablas_screen.dart';
 import 'qr_generator_screen.dart';
 import 'qr_scanner_screen.dart';
+import 'attendance_history_screen.dart';
+import 'sos_alert_screen.dart';
+import 'sport_passport_screen.dart';
+import 'lopdp_vault_screen.dart';
+import 'session_attendance_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class DashboardScreen extends StatefulWidget {
   final String currentAthleteId;
 
-  const DashboardScreen({Key? key, required this.currentAthleteId}) : super(key: key);
+  const DashboardScreen({Key? key, required this.currentAthleteId})
+    : super(key: key);
 
   @override
   _DashboardScreenState createState() => _DashboardScreenState();
@@ -32,30 +41,126 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator(color: Colors.white)),
+            backgroundColor: Color(0xFF001F3F),
+            body: Center(child: CircularProgressIndicator(color: Color(0xFF00E5FF))),
           );
         }
         if (snapshot.hasError) {
-          return const Scaffold(
-            body: Center(child: Text("Error al cargar data de athletes", style: TextStyle(color: Colors.white))),
+          return Scaffold(
+            backgroundColor: Colors.black,
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Text(
+                  "Error al cargar data de athletes:\n\n${snapshot.error}",
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
           );
         }
         if (!snapshot.hasData || !snapshot.data!.exists) {
-          _firestoreService.ensureAthleteProfile(
-            widget.currentAthleteId,
-            nombre: user?.displayName,
-            email: user?.email,
-          );
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator(color: Colors.white)),
+          // El perfil de atleta solo puede crearse desde el backoffice (admin).
+          // Art. 26 LOPDP: la cuenta debe pasar por el proceso de consentimiento
+          // del tutor antes de existir en Firestore.
+          return Scaffold(
+            backgroundColor: const Color(0xFF0A192F),
+            body: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF001F3F), Color(0xFF00E5FF)],
+                ),
+              ),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+                      child: Container(
+                        padding: const EdgeInsets.all(32),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: const Color(0xFF00E5FF).withValues(alpha: 0.5),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF00E5FF).withValues(alpha: 0.2),
+                              blurRadius: 20,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.person_off_outlined,
+                              size: 64,
+                              color: Color(0xFF00E5FF),
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'Perfil no configurado',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Tu cuenta requiere el consentimiento de tu tutor legal (LOPDP).\nContacta al administrador de tu institución.',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                                height: 1.5,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 24),
+                            OutlinedButton.icon(
+                              onPressed: () => FirebaseAuth.instance.signOut(),
+                              icon: const Icon(Icons.logout, color: Colors.white),
+                              label: const Text('Cerrar sesión', style: TextStyle(color: Colors.white)),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.white30),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           );
         }
 
         final athleteDoc = snapshot.data!;
         final athleteData = athleteDoc.data()!;
-        final String nombre = athleteData['full_name'] ?? athleteData['nombre_completo'] ?? athleteData['nombre'] ?? 'Desconocido';
-        final String sport = athleteData['sport'] ?? athleteData['disciplina'] ?? 'Sin disciplina';
+        final String nombre =
+            athleteData['full_name'] ??
+            athleteData['nombre_completo'] ??
+            athleteData['nombre'] ??
+            'Desconocido';
+        final String sport =
+            athleteData['sport'] ??
+            athleteData['disciplina'] ??
+            'Sin disciplina';
 
+        // Cargar el rol del usuario autenticado para RoleGate.
+        // Se hace una sola consulta con FutureBuilder anidado en la sección protegida.
         return Scaffold(
           extendBody: true,
           extendBodyBehindAppBar: true,
@@ -91,40 +196,116 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: SingleChildScrollView(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildWelcomeCard(nombre, sport, athleteData['photoBase64']),
-                      const SizedBox(height: 24),
-                      const Text(
-                        "Acciones Rápidas",
-                        style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 18),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildQuickActions(athleteDoc.id, nombre, sport),
-                      const SizedBox(height: 24),
-                      const Text(
-                        "Staff Tools (Demo)",
-                        style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 18),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildStaffActions(),
-                      const SizedBox(height: 24),
-                      const Text(
-                        "Rendimiento",
-                        style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 18),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildWeeklyPerformance(),
-                    ],
+                  child: FutureBuilder<DocumentSnapshot>(
+                    // Carga el rol del usuario una sola vez (no es un stream — el rol es estable durante la sesión).
+                    future: user != null
+                        ? FirebaseFirestore.instance.collection('users').doc(user.uid).get()
+                        : FirebaseFirestore.instance.collection('_dummy_').doc('_dummy_').get(),
+                    builder: (context, userSnap) {
+                      final rawData = userSnap.data?.data();
+                      final userData = rawData != null
+                          ? Map<String, dynamic>.from(rawData as Map)
+                          : <String, dynamic>{};
+                      final userRole = RbacService.normalize(userData['role'] as String?);
+                      final institutionId = userData['institutionId'] as String? ?? 'inst_piloto_stresstest';
+                      final coachName    = userData['displayName'] as String? ?? 'Coach';
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // ── Bienvenida ────────────────────────────────────
+                          _buildWelcomeCard(nombre, sport, athleteData['photoBase64']),
+                          const SizedBox(height: 24),
+
+                          // ── ⚡ Acciones Rápidas (Atleta) ──────────────────
+                          // Requerimiento: Entreno · Acceso (QR) · Torneos
+                          _buildSectionHeader('Acciones Rápidas'),
+                          const SizedBox(height: 16),
+                          _buildQuickActions(athleteDoc.id, nombre, sport),
+                          const SizedBox(height: 24),
+
+                          // ── Identidad Digital ─────────────────────────────
+                          _buildSectionHeader('Identidad Digital'),
+                          const SizedBox(height: 16),
+                          _buildPassportBanner(athleteDoc.id, nombre),
+                          const SizedBox(height: 24),
+
+                          // ── Rendimiento ───────────────────────────────────
+                          _buildSectionHeader('Rendimiento'),
+                          const SizedBox(height: 16),
+                          _buildWeeklyPerformance(athleteDoc.id),
+                          const SizedBox(height: 24),
+                          _buildKineticLabBanner(athleteDoc.id, nombre, sport),
+                          const SizedBox(height: 24),
+
+                          // ── Privacidad ────────────────────────────────────
+                          _buildSectionHeader('Privacidad'),
+                          const SizedBox(height: 16),
+                          _buildLopdpVaultBanner(athleteDoc.id, nombre),
+                          const SizedBox(height: 24),
+
+                          // ── Panel de Sesión (SOLO coach / admin) ──────────
+                          // RoleGate: si el usuario es atleta puro, esta sección
+                          // NO se renderiza — cero memoria, cero excepción 403.
+                          RoleGate(
+                            currentRole: userRole,
+                            allowedRoles: [RbacService.roleCoach, RbacService.roleAdmin],
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildSectionHeader('Panel de Sesión'),
+                                const SizedBox(height: 16),
+                                _buildSessionAttendanceBanner(user?.uid, institutionId, coachName),
+                              ],
+                            ),
+                          ),
+
+                          // ── Staff Tools (SOLO coach / admin) ──────────────
+                          // Zero Trust · Historial · S.O.S
+                          // RBAC: role athlete NUNCA ve estas herramientas.
+                          RoleGate(
+                            currentRole: userRole,
+                            allowedRoles: [RbacService.roleCoach, RbacService.roleAdmin],
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const SizedBox(height: 8),
+                                _buildSectionHeader('Staff · Zero Trust'),
+                                const SizedBox(height: 16),
+                                _buildStaffActions(nombre),
+                                const SizedBox(height: 24),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
             ),
           ),
-          bottomNavigationBar: _buildGlassBottomBar(context, athleteDoc.id, nombre, sport, athleteData),
+          bottomNavigationBar: _buildGlassBottomBar(
+            context,
+            athleteDoc.id,
+            nombre,
+            sport,
+            athleteData,
+          ),
         );
       },
+    );
+  }
+
+  // ── Encabezado de sección reutilizable ────────────────────────────────────
+  Widget _buildSectionHeader(String label) {
+    return Text(
+      label,
+      style: const TextStyle(
+        color: Colors.white70,
+        fontWeight: FontWeight.bold,
+        fontSize: 18,
+      ),
     );
   }
 
@@ -136,9 +317,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Container(
           padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.15),
+            color: Colors.white.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(32),
-            border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.2),
+              width: 1.5,
+            ),
           ),
           child: Row(
             children: [
@@ -148,17 +332,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 height: 70,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    width: 2,
+                  ),
                   boxShadow: [
-                    BoxShadow(color: Colors.white.withOpacity(0.2), blurRadius: 15, spreadRadius: 2),
+                    BoxShadow(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      blurRadius: 15,
+                      spreadRadius: 2,
+                    ),
                   ],
                 ),
                 child: CircleAvatar(
                   backgroundColor: Colors.white24,
-                  backgroundImage: (photoBase64 != null && photoBase64.isNotEmpty) 
-                      ? MemoryImage(base64Decode(photoBase64)) 
+                  backgroundImage:
+                      (photoBase64 != null && photoBase64.isNotEmpty)
+                      ? MemoryImage(base64Decode(photoBase64))
                       : null,
-                  child: photoBase64 == null ? const Icon(CupertinoIcons.person_fill, color: Colors.white, size: 35) : null,
+                  child: photoBase64 == null
+                      ? const Icon(
+                          CupertinoIcons.person_fill,
+                          color: Colors.white,
+                          size: 35,
+                        )
+                      : null,
                 ),
               ),
               const SizedBox(width: 20),
@@ -166,25 +364,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text("Bienvenido,", style: TextStyle(color: Colors.white70, fontSize: 14, letterSpacing: 1.2)),
+                    const Text(
+                      "Bienvenido,",
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
                     Text(
                       nombre,
-                      style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withOpacity(0.1)),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.1),
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.sports_volleyball, color: Colors.white, size: 14),
+                          const Icon(
+                            Icons.sports_volleyball,
+                            color: Colors.white,
+                            size: 14,
+                          ),
                           const SizedBox(width: 6),
-                          Text(sport, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                          Text(
+                            sport,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -231,7 +456,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const QrGeneratorScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const QrGeneratorScreen(),
+                ),
               );
             },
           ),
@@ -255,7 +482,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildStaffActions() {
+  Widget _buildStaffActions(String nombre) {
     return Row(
       children: [
         Expanded(
@@ -267,24 +494,337 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const QrScannerScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const QrScannerScreen(),
+                ),
               );
             },
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: Container(), // Spacer to visually un-stretch if needed, or add future tools
+          child: _actionCard(
+            "Historial",
+            "Asistencia",
+            CupertinoIcons.clock_fill,
+            const Color(0xFF00E5FF),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => AttendanceHistoryScreen(
+                    athleteUid: widget.currentAthleteId,
+                    athleteName: 'Atleta',
+                  ),
+                ),
+              );
+            },
+          ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: Container(),
+          child: _actionCard(
+            "S.O.S",
+            "Emergencia",
+            Icons.emergency,
+            const Color(0xFFFF1744),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SosAlertScreen(
+                    athleteUid: widget.currentAthleteId,
+                    athleteName: nombre,
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ],
     );
   }
 
-  Widget _actionCard(String title, String subtitle, IconData icon, Color iconColor, {required VoidCallback onTap}) {
+  Widget _buildPassportBanner(String athleteId, String nombre) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SportPassportScreen(athleteId: athleteId, athleteName: nombre),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF0D1B3E).withValues(alpha: 0.9),
+                  const Color(0xFF0A2A5C).withValues(alpha: 0.85),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.35), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.15),
+                  blurRadius: 20, spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF00E5FF).withValues(alpha: 0.12),
+                    border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.4)),
+                  ),
+                  child: const Icon(Icons.badge_rounded, color: Color(0xFF00E5FF), size: 28),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Pasaporte Deportivo Digital',
+                          style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                      SizedBox(height: 3),
+                      Text('Credencial Smart ID · Modo Offline disponible',
+                          style: TextStyle(color: Colors.white54, fontSize: 11)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios, color: Color(0xFF00E5FF), size: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKineticLabBanner(String athleteId, String nombre, String sport) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => KineticLabScreen(
+            athleteId: athleteId,
+            athleteName: nombre,
+            sport: sport,
+          ),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF003F87).withValues(alpha: 0.9),
+                  const Color(0xFF0056B3).withValues(alpha: 0.85),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.4), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.18),
+                  blurRadius: 20, spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF00E5FF).withValues(alpha: 0.12),
+                    border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.4)),
+                  ),
+                  child: const Icon(CupertinoIcons.bolt_fill, color: Color(0xFF00E5FF), size: 28),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Kinetic Lab · Core de IA',
+                          style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                      SizedBox(height: 3),
+                      Text('Telemetría deportiva y Gemini Biometric Review',
+                          style: TextStyle(color: Colors.white54, fontSize: 11)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios, color: Color(0xFF00E5FF), size: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLopdpVaultBanner(String athleteId, String nombre) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => LopdpVaultScreen(
+            athleteUid: athleteId,
+            athleteName: nombre,
+          ),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF1A0A3E).withValues(alpha: 0.9),
+                  const Color(0xFF2A0A5C).withValues(alpha: 0.85),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: Colors.purpleAccent.withValues(alpha: 0.35), width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.purpleAccent.withValues(alpha: 0.12),
+                  blurRadius: 20, spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.purpleAccent.withValues(alpha: 0.12),
+                    border: Border.all(
+                        color: Colors.purpleAccent.withValues(alpha: 0.4)),
+                  ),
+                  child: const Icon(Icons.shield_rounded,
+                      color: Colors.purpleAccent, size: 28),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Bóveda LOPDP',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold)),
+                      SizedBox(height: 3),
+                      Text('Consentimientos · Derechos ARCO · Privacidad',
+                          style: TextStyle(
+                              color: Colors.white54, fontSize: 11)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios,
+                    color: Colors.purpleAccent, size: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Panel de sesión de asistencia — exclusivo coach/admin.
+  // La verificación de rol es responsabilidad del RoleGate en el caller.
+  // Recibe los parámetros ya resueltos para evitar doble Firestore read.
+  Widget _buildSessionAttendanceBanner(String? uid, String institutionId, String coachName) {
+    if (uid == null) return const SizedBox.shrink();
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SessionAttendanceScreen(
+            institutionId: institutionId,
+            coachName:     coachName,
+          ),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft, end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF00E5FF).withValues(alpha: 0.12),
+                  Colors.amber.withValues(alpha: 0.08),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.35), width: 1.2),
+            ),
+            child: Row(children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.15),
+                ),
+                child: const Icon(Icons.fact_check_rounded,
+                    color: Color(0xFF00E5FF), size: 28),
+              ),
+              const SizedBox(width: 16),
+              const Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Panel de Asistencia en Vivo',
+                      style: TextStyle(color: Colors.white, fontSize: 15,
+                          fontWeight: FontWeight.bold)),
+                  SizedBox(height: 3),
+                  Text('Presentes · Ausentes · Marcado manual',
+                      style: TextStyle(color: Colors.white54, fontSize: 11)),
+                ]),
+              ),
+              const Icon(Icons.arrow_forward_ios,
+                  color: Color(0xFF00E5FF), size: 16),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _actionCard(
+    String title,
+    String subtitle,
+    IconData icon,
+    Color iconColor, {
+    required VoidCallback onTap,
+  }) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
@@ -294,9 +834,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.15),
+                width: 1,
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -304,15 +847,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.1),
+                    color: iconColor.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(icon, size: 32, color: iconColor),
                 ),
                 const SizedBox(height: 16),
-                Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text(subtitle, style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                Text(
+                  subtitle,
+                  style: const TextStyle(color: Colors.white60, fontSize: 11),
+                ),
               ],
             ),
           ),
@@ -321,75 +874,167 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildWeeklyPerformance() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
+  Widget _buildWeeklyPerformance(String athleteId) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('athletes')
+          .doc(athleteId)
+          .collection('historial_entrenamientos')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return ClipRRect(
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.15)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text("Rendimiento Semanal", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                  Icon(CupertinoIcons.graph_square, color: Colors.white70, size: 20),
-                ],
-              ),
-              const SizedBox(height: 20),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: const LinearProgressIndicator(
-                  value: 0.8,
-                  minHeight: 8,
-                  backgroundColor: Colors.white10,
-                  color: Color(0xFF00E5FF),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(
+                      CupertinoIcons.flame,
+                      size: 48,
+                      color: Colors.white30,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      "Aún no hay registros",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "El primer paso es empezar. ¡Ve a la sección Entreno y comienza a sudar la camiseta!",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
+            ),
+          );
+        }
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _metricBlock("12.4h", "Tiempo Total"),
-                  _metricBlock("3.2k", "Calorías"),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Rendimiento Semanal",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Icon(
+                        CupertinoIcons.graph_square,
+                        color: Colors.white70,
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: const LinearProgressIndicator(
+                      value: 0.8,
+                      minHeight: 8,
+                      backgroundColor: Colors.white10,
+                      color: Color(0xFF00E5FF),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _metricBlock("${snapshot.data!.docs.length}", "Sesiones"),
+                      _metricBlock("3.2k", "Calorías"),
+                    ],
+                  ),
                 ],
-              )
-            ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   Widget _metricBlock(String value, String label) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
         const SizedBox(height: 4),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.white60, letterSpacing: 1.2)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 10,
+            color: Colors.white60,
+            letterSpacing: 1.2,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildGlassBottomBar(BuildContext context, String athleteId, String nombre, String sport, Map<String, dynamic> athleteData) {
+  Widget _buildGlassBottomBar(
+    BuildContext context,
+    String athleteId,
+    String nombre,
+    String sport,
+    Map<String, dynamic> athleteData,
+  ) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.transparent,
-      ),
+      decoration: const BoxDecoration(color: Colors.transparent),
       child: ClipRRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20), // Aumentamos un poco el blur
+          filter: ImageFilter.blur(
+            sigmaX: 20,
+            sigmaY: 20,
+          ), // Aumentamos un poco el blur
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03), // Menos opacidad para el 'cristal'
-              border: Border(top: BorderSide(color: Colors.white.withOpacity(0.2), width: 0.5)),
+              color: Colors.white.withValues(alpha: 
+                0.03,
+              ), // Menos opacidad para el 'cristal'
+              border: Border(
+                top: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  width: 0.5,
+                ),
+              ),
             ),
             child: BottomNavigationBar(
               currentIndex: 0,
@@ -398,37 +1043,145 @@ class _DashboardScreenState extends State<DashboardScreen> {
               type: BottomNavigationBarType.fixed,
               iconSize: 28, // Mayor presencia visual en el cristal
               selectedItemColor: const Color(0xFF00E5FF), // Cian Eléctrico
-              unselectedItemColor: Colors.white.withOpacity(0.6), // Ajuste a 0.6 para no verse apagados
-              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-              unselectedLabelStyle: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.6)),
+              unselectedItemColor: Colors.white.withValues(alpha: 
+                0.6,
+              ), // Ajuste a 0.6 para no verse apagados
+              selectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+              unselectedLabelStyle: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withValues(alpha: 0.6),
+              ),
               onTap: (index) {
                 if (index == 0) return;
                 if (index == 1) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => TrainingScreen(athleteId: athleteId, athleteName: nombre, sport: sport)),
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: Colors.transparent,
+                    builder: (ctx) {
+                      return BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF0D1B3E),
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 40, height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.white24,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              const Text(
+                                'Módulos Deportivos & IA',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  fontFamily: 'Manrope',
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              ListTile(
+                                leading: const Icon(CupertinoIcons.play_circle_fill, color: Color(0xFF00E5FF), size: 28),
+                                title: const Text(
+                                  'Rutina Generada por IA',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                                ),
+                                subtitle: const Text(
+                                  'Entrenamiento de fuerza y velocidad adaptado por Gemini',
+                                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                                ),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => TrainingScreen(
+                                        athleteId: athleteId,
+                                        athleteName: nombre,
+                                        sport: sport,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const Divider(color: Colors.white12, height: 16),
+                              ListTile(
+                                leading: const Icon(CupertinoIcons.bolt_fill, color: Color(0xFF00E5FF), size: 28),
+                                title: const Text(
+                                  'Kinetic Lab (IA & Biometría)',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                                ),
+                                subtitle: const Text(
+                                  'Gráficos de telemetría, simulación y reporte biomecánico AI',
+                                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                                ),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => KineticLabScreen(
+                                        athleteId: athleteId,
+                                        athleteName: nombre,
+                                        sport: sport,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 24),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   );
                 } else if (index == 2) {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => ProfileScreen(athleteId: athleteId, athleteName: nombre, photoBase64: athleteData['photoBase64'])),
+                    MaterialPageRoute(
+                      builder: (context) => ProfileScreen(
+                        athleteId: athleteId,
+                        athleteName: nombre,
+                        photoBase64: athleteData['photoBase64'],
+                      ),
+                    ),
                   );
                 }
               },
               items: const [
                 BottomNavigationBarItem(
-                  icon: Icon(CupertinoIcons.house), 
-                  activeIcon: Icon(CupertinoIcons.house_fill, shadows: [Shadow(color: Color(0xFF00E5FF), blurRadius: 12)]),
+                  icon: Icon(CupertinoIcons.house),
+                  activeIcon: Icon(
+                    CupertinoIcons.house_fill,
+                    shadows: [Shadow(color: Color(0xFF00E5FF), blurRadius: 12)],
+                  ),
                   label: 'Dashboard',
                 ),
                 BottomNavigationBarItem(
-                  icon: Icon(CupertinoIcons.bolt), 
-                  activeIcon: Icon(CupertinoIcons.bolt_fill, shadows: [Shadow(color: Color(0xFF00E5FF), blurRadius: 12)]),
+                  icon: Icon(CupertinoIcons.bolt),
+                  activeIcon: Icon(
+                    CupertinoIcons.bolt_fill,
+                    shadows: [Shadow(color: Color(0xFF00E5FF), blurRadius: 12)],
+                  ),
                   label: 'Rutina',
                 ),
                 BottomNavigationBarItem(
-                  icon: Icon(CupertinoIcons.person), 
-                  activeIcon: Icon(CupertinoIcons.person_fill, shadows: [Shadow(color: Color(0xFF00E5FF), blurRadius: 12)]),
+                  icon: Icon(CupertinoIcons.person),
+                  activeIcon: Icon(
+                    CupertinoIcons.person_fill,
+                    shadows: [Shadow(color: Color(0xFF00E5FF), blurRadius: 12)],
+                  ),
                   label: 'Perfil',
                 ),
               ],

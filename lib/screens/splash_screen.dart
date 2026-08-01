@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../services/preferences_service.dart';
 import 'language_picker_screen.dart';
 import 'onboarding_screen.dart';
@@ -74,7 +73,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 'POWERED BY ROMMEL ASITIMBAY MORALES',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.8),
+                  color: Colors.white.withValues(alpha: 0.8),
                   fontSize: 10,
                   letterSpacing: 2.5,
                   fontWeight: FontWeight.w300,

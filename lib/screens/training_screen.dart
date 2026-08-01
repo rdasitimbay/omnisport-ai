@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import '../services/ai_service.dart';
 import '../services/firestore_service.dart';
+import '../services/offline_sync_service.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import '../models/session_model.dart';
 
 class TrainingScreen extends StatefulWidget {
   final String athleteId;
@@ -23,7 +26,7 @@ class TrainingScreen extends StatefulWidget {
 class _TrainingScreenState extends State<TrainingScreen> {
   final AIService _aiService = AIService();
   final FirestoreService _firestoreService = FirestoreService();
-  
+
   late Future<Map<String, dynamic>> _routineFuture;
   List<bool>? _completedExercises;
   bool _isSaving = false;
@@ -31,10 +34,14 @@ class _TrainingScreenState extends State<TrainingScreen> {
   @override
   void initState() {
     super.initState();
-    _routineFuture = _aiService.generateTrainingRoutine(widget.athleteName, widget.sport);
+    _routineFuture = _aiService.generateTrainingRoutine(
+      widget.athleteName,
+      widget.sport,
+    );
   }
 
-  bool get _allCompleted => _completedExercises != null && _completedExercises!.every((e) => e);
+  bool get _allCompleted =>
+      _completedExercises != null && _completedExercises!.every((e) => e);
 
   Future<void> _handleFinishSession(List exercises) async {
     if (!_allCompleted || _isSaving) return;
@@ -42,26 +49,58 @@ class _TrainingScreenState extends State<TrainingScreen> {
     setState(() => _isSaving = true);
 
     try {
-      await _firestoreService.addTrainingSession(widget.athleteId, {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final sessionData = {
         'sport': widget.sport,
         'ejercicios_completados': exercises.length,
         'atleta': widget.athleteName,
         'tipo': 'IA Generated',
-      });
+      };
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('¡Entrenamiento guardado con éxito! 🏆'),
-            backgroundColor: Colors.green,
-          ),
+      if (connectivityResult.contains(ConnectivityResult.none) || OfflineSyncService.forceOfflineMode) {
+        // Modo offline: Guardar en Hive
+        final sessionModel = SessionModel(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          athleteId: widget.athleteId,
+          sport: widget.sport,
+          ejerciciosCompletados: exercises.length,
+          atletaNombre: widget.athleteName,
+          tipo: 'IA Generated',
+          fecha: DateTime.now(),
         );
-        Navigator.pop(context);
+        await OfflineSyncService.saveModelLocally(sessionModel);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Sin conexión. Guardado en caché interno 📱'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          Navigator.pop(context);
+        }
+      } else {
+        // Modo online: Guardar en Firestore
+        await _firestoreService.addTrainingSession(
+          widget.athleteId,
+          sessionData,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('¡Entrenamiento guardado con éxito! 🏆'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al guardar: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error al guardar: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -92,10 +131,18 @@ class _TrainingScreenState extends State<TrainingScreen> {
               return _buildErrorState(snapshot.error.toString());
             } else if (snapshot.hasData) {
               final List exercises = snapshot.data!['exercises'] ?? [];
-              _completedExercises ??= List.filled(exercises.length, false);
+              // Re-initialize if null OR if exercise count changed (e.g. after retry)
+              if (_completedExercises == null || _completedExercises!.length != exercises.length) {
+                _completedExercises = List.filled(exercises.length, false);
+              }
               return _buildMainContent(exercises);
             } else {
-              return const Center(child: Text('No hay datos disponibles.', style: TextStyle(color: Colors.white)));
+              return const Center(
+                child: Text(
+                  'No hay datos disponibles.',
+                  style: TextStyle(color: Colors.white),
+                ),
+              );
             }
           },
         ),
@@ -112,7 +159,12 @@ class _TrainingScreenState extends State<TrainingScreen> {
           const SizedBox(height: 24),
           Text(
             'Generando Rutina IA...',
-            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.9),
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
           ),
         ],
       ),
@@ -129,11 +181,17 @@ class _TrainingScreenState extends State<TrainingScreen> {
           Text('Error: $error', style: const TextStyle(color: Colors.white70)),
           TextButton(
             onPressed: () => setState(() {
-              _routineFuture = _aiService.generateTrainingRoutine(widget.athleteName, widget.sport);
+              _routineFuture = _aiService.generateTrainingRoutine(
+                widget.athleteName,
+                widget.sport,
+              );
               _completedExercises = null;
             }),
-            child: const Text('Reintentar', style: TextStyle(color: Color(0xFF00E5FF))),
-          )
+            child: const Text(
+              'Reintentar',
+              style: TextStyle(color: Color(0xFF00E5FF)),
+            ),
+          ),
         ],
       ),
     );
@@ -154,24 +212,39 @@ class _TrainingScreenState extends State<TrainingScreen> {
                   children: [
                     const Text(
                       'Tu Rutina del Día',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
                         '${_completedExercises!.where((e) => e).length}/${exercises.length}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF00E5FF)),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF00E5FF),
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text('Marca cada ejercicio al finalizar para completar la sesión.', 
-                     style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14)),
+                Text(
+                  'Marca cada ejercicio al finalizar para completar la sesión.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    fontSize: 14,
+                  ),
+                ),
               ],
             ),
           ),
@@ -211,12 +284,17 @@ class _TrainingScreenState extends State<TrainingScreen> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: FlexibleSpaceBar(
-            title: Text('${widget.sport} Intensity', 
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.5)),
-            centerTitle: true,
-            background: Container(
-              color: Colors.white.withOpacity(0.05),
+            title: Text(
+              '${widget.sport} Intensity',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                letterSpacing: 1.5,
+              ),
             ),
+            centerTitle: true,
+            background: Container(color: Colors.white.withValues(alpha: 0.05)),
           ),
         ),
       ),
@@ -225,7 +303,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
   Widget _buildExerciseCard(dynamic exercise, int index) {
     bool isDone = _completedExercises![index];
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       child: ClipRRect(
@@ -235,16 +313,21 @@ class _TrainingScreenState extends State<TrainingScreen> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             decoration: BoxDecoration(
-              color: isDone ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.12),
+              color: isDone
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.white.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: isDone ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.2),
+                color: isDone
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.white.withValues(alpha: 0.2),
                 width: 1,
               ),
             ),
             child: InkWell(
               borderRadius: BorderRadius.circular(24),
-              onTap: () => setState(() => _completedExercises![index] = !isDone),
+              onTap: () =>
+                  setState(() => _completedExercises![index] = !isDone),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Row(
@@ -256,21 +339,31 @@ class _TrainingScreenState extends State<TrainingScreen> {
                           Text(
                             exercise['name'] ?? 'Ejercicio',
                             style: TextStyle(
-                              fontSize: 18, 
+                              fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              decoration: isDone ? TextDecoration.lineThrough : null,
+                              decoration: isDone
+                                  ? TextDecoration.lineThrough
+                                  : null,
                               color: isDone ? Colors.white38 : Colors.white,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Semanas: ${exercise['reps']}',
-                            style: const TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold, fontSize: 13),
+                            style: const TextStyle(
+                              color: Color(0xFF00E5FF),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             exercise['desc'] ?? '',
-                            style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.6), height: 1.4),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white.withValues(alpha: 0.6),
+                              height: 1.4,
+                            ),
                           ),
                         ],
                       ),
@@ -293,54 +386,83 @@ class _TrainingScreenState extends State<TrainingScreen> {
       height: 36,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isDone ? const Color(0xFF00E5FF) : Colors.white.withOpacity(0.10),
-        border: Border.all(color: isDone ? const Color(0xFF00E5FF) : Colors.white.withOpacity(0.3), width: 1.5),
-        boxShadow: isDone ? [
-          BoxShadow(color: const Color(0xFF00E5FF).withOpacity(0.3), blurRadius: 8, spreadRadius: 1),
-        ] : [],
+        color: isDone
+            ? const Color(0xFF00E5FF)
+            : Colors.white.withValues(alpha: 0.10),
+        border: Border.all(
+          color: isDone
+              ? const Color(0xFF00E5FF)
+              : Colors.white.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+        boxShadow: isDone
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ]
+            : [],
       ),
       child: Icon(
-        Icons.check, 
-        size: 20, 
-        color: isDone ? Colors.black87 : Colors.transparent
+        Icons.check,
+        size: 20,
+        color: isDone ? Colors.black87 : Colors.transparent,
       ),
     );
   }
 
   Widget _buildFinishButton(List exercises) {
     bool ready = _allCompleted;
-    
+
     return Container(
       width: double.infinity,
       height: 60,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: LinearGradient(
-          colors: ready 
-            ? [const Color(0xFF00E5FF), const Color(0xFF00BFA5)] // Cyan gradient
-            : [Colors.white.withOpacity(0.1), Colors.white.withOpacity(0.05)], // Glassy inactive
+          colors: ready
+              ? [
+                  const Color(0xFF00E5FF),
+                  const Color(0xFF00BFA5),
+                ] // Cyan gradient
+              : [
+                  Colors.white.withValues(alpha: 0.1),
+                  Colors.white.withValues(alpha: 0.05),
+                ], // Glassy inactive
         ),
-        boxShadow: ready ? [
-          BoxShadow(color: const Color(0xFF00E5FF).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 6)),
-        ] : [],
+        boxShadow: ready
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.3),
+                  blurRadius: 15,
+                  offset: const Offset(0, 6),
+                ),
+              ]
+            : [],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(24),
-          onTap: ready && !_isSaving ? () => _handleFinishSession(exercises) : null,
+          onTap: ready && !_isSaving
+              ? () => _handleFinishSession(exercises)
+              : null,
           child: Center(
-            child: _isSaving 
-              ? const CircularProgressIndicator(color: Colors.white)
-              : Text(
-                   ready ? 'FINALIZAR ENTRENAMIENTO' : 'COMPLETA TODOS LOS EJERCICIOS',
-                  style: TextStyle(
-                    color: ready ? Colors.black87 : Colors.white38, 
-                    fontWeight: FontWeight.bold, 
-                    fontSize: 14, 
-                    letterSpacing: 1.5
+            child: _isSaving
+                ? const CircularProgressIndicator(color: Colors.white)
+                : Text(
+                    ready
+                        ? 'FINALIZAR ENTRENAMIENTO'
+                        : 'COMPLETA TODOS LOS EJERCICIOS',
+                    style: TextStyle(
+                      color: ready ? Colors.black87 : Colors.white38,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      letterSpacing: 1.5,
+                    ),
                   ),
-                ),
           ),
         ),
       ),
